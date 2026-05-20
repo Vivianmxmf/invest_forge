@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "invest-forge"
+version = "0.1.0"
+description = "AI-driven subjective investment research assistant — LangGraph Multi-Agent + Hybrid RAG."
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "Weijia Han", email = "weivivi77@gmail.com" }]
+keywords = ["langgraph", "rag", "investment-research", "ai-agent", "multi-agent"]
+
+[project.urls]
+Homepage = "https://github.com/Vivianmxmf/invest_forge"
+Repository = "https://github.com/Vivianmxmf/invest_forge"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["invest_forge*"]
+exclude = ["tests*", "notebooks*", "frontend*", "scripts*", "configs*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "N", "SIM", "TID", "C4"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["N802", "N803"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["invest_forge"]
+
+[tool.mypy]
+python_version = "3.10"
+strict_optional = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+ignore_missing_imports = true
+exclude = ["notebooks/"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+addopts = "-ra -q --strict-markers --strict-config"
+markers = [
+    "unit: fast pure-Python unit tests",
+    "integration: requires network / vector store / real LLM",
+    "slow: long-running tests",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:pandera.*",
+    "ignore::DeprecationWarning:pydantic.*",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["invest_forge"]
+omit = ["tests/*", "*/__init__.py"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 65

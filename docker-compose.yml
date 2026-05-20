@@ -1,0 +1,62 @@
+name: invest_forge
+
+# Profiles:
+#   --profile rag        only Qdrant
+#   --profile vllm       Qdrant + vLLM (server only, requires NVIDIA GPUs)
+#   --profile all        everything
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.10.1
+    # ``vllm`` profile also pulls qdrant in so a single
+    # ``docker compose --profile vllm up -d`` provides both the LLM endpoint
+    # AND the vector store the API needs to read from.
+    profiles: [rag, vllm, all]
+    container_name: invest_forge_qdrant
+    restart: unless-stopped
+    ports:
+      # Bind to loopback by default; override QDRANT_BIND for remote access.
+      - "${QDRANT_BIND:-127.0.0.1}:${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_BIND:-127.0.0.1}:${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:6333/healthz"]
+      interval: 10s
+      retries: 5
+
+  vllm:
+    # Only schedule this on the server (requires nvidia-container-toolkit).
+    image: vllm/vllm-openai:v0.5.4
+    profiles: [vllm, all]
+    container_name: invest_forge_vllm
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      HUGGING_FACE_HUB_TOKEN: ${HUGGING_FACE_HUB_TOKEN:-}
+    ports:
+      - "${VLLM_PORT:-8000}:8000"
+    volumes:
+      - ${HF_CACHE:-./models}:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command:
+      - --model
+      - ${LOCAL_LLM_MODEL:-Qwen/Qwen1.5-1.8B-Chat}
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --gpu-memory-utilization
+      - "0.85"
+      - --max-model-len
+      - "4096"
+
+volumes:
+  qdrant_storage:

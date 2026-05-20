@@ -1,0 +1,212 @@
+{
+  "688981.SH": [
+    {
+      "title": "公司发布 2024 年报, 净利润同比 +28%",
+      "published": "2025-03-31",
+      "source": "sample",
+      "sentiment": 0.42,
+      "label": "positive",
+      "summary": "公司发布 2024 年报, 净利润同比 +28%"
+    },
+    {
+      "title": "12 寸晶圆产能持续扩张, 国产替代进度领先",
+      "published": "2025-04-09",
+      "source": "sample",
+      "sentiment": 0.3,
+      "label": "positive",
+      "summary": "12 寸晶圆产能持续扩张, 国产替代进度领先"
+    },
+    {
+      "title": "美国出口管制再升级, 高端工艺面临压力",
+      "published": "2025-03-25",
+      "source": "sample",
+      "sentiment": -0.35,
+      "label": "negative",
+      "summary": "美国出口管制再升级, 高端工艺面临压力"
+    },
+    {
+      "title": "机构调研活跃, 公募基金二季度增持",
+      "published": "2025-03-03",
+      "source": "sample",
+      "sentiment": 0.18,
+      "label": "positive",
+      "summary": "机构调研活跃, 公募基金二季度增持"
+    },
+    {
+      "title": "一季度业绩低于市场预期, 短期承压",
+      "published": "2025-04-04",
+      "source": "sample",
+      "sentiment": -0.22,
+      "label": "negative",
+      "summary": "一季度业绩低于市场预期, 短期承压"
+    }
+  ],
+  "600519.SH": [
+    {
+      "title": "茅台一季度营收增长稳健, 高端白酒韧性凸显",
+      "published": "2025-03-02",
+      "source": "sample",
+      "sentiment": 0.31,
+      "label": "positive",
+      "summary": "茅台一季度营收增长稳健, 高端白酒韧性凸显"
+    },
+    {
+      "title": "公司宣布提价, 渠道反响积极",
+      "published": "2025-03-17",
+      "source": "sample",
+      "sentiment": 0.4,
+      "label": "positive",
+      "summary": "公司宣布提价, 渠道反响积极"
+    },
+    {
+      "title": "消费税改革预期升温, 板块情绪波动",
+      "published": "2025-04-20",
+      "source": "sample",
+      "sentiment": -0.2,
+      "label": "negative",
+      "summary": "消费税改革预期升温, 板块情绪波动"
+    },
+    {
+      "title": "分红比例创新高, 现金奶牛属性强化",
+      "published": "2025-03-28",
+      "source": "sample",
+      "sentiment": 0.36,
+      "label": "positive",
+      "summary": "分红比例创新高, 现金奶牛属性强化"
+    },
+    {
+      "title": "二三线白酒挤压终端, 行业竞争加剧",
+      "published": "2025-04-05",
+      "source": "sample",
+      "sentiment": -0.18,
+      "label": "negative",
+      "summary": "二三线白酒挤压终端, 行业竞争加剧"
+    }
+  ],
+  "300750.SZ": [
+    {
+      "title": "公司拿下欧洲大单, 海外营收占比突破 30%",
+      "published": "2025-04-27",
+      "source": "sample",
+      "sentiment": 0.45,
+      "label": "positive",
+      "summary": "公司拿下欧洲大单, 海外营收占比突破 30%"
+    },
+    {
+      "title": "新一代麒麟电池量产, 能量密度行业领先",
+      "published": "2025-03-14",
+      "source": "sample",
+      "sentiment": 0.38,
+      "label": "positive",
+      "summary": "新一代麒麟电池量产, 能量密度行业领先"
+    },
+    {
+      "title": "锂价下行压制毛利, 一季度盈利同比承压",
+      "published": "2025-04-20",
+      "source": "sample",
+      "sentiment": -0.28,
+      "label": "negative",
+      "summary": "锂价下行压制毛利, 一季度盈利同比承压"
+    },
+    {
+      "title": "固态电池进度低于市场预期, 估值下修",
+      "published": "2025-04-15",
+      "source": "sample",
+      "sentiment": -0.22,
+      "label": "negative",
+      "summary": "固态电池进度低于市场预期, 估值下修"
+    },
+    {
+      "title": "储能业务订单饱满, 排产至明年中",
+      "published": "2025-03-23",
+      "source": "sample",
+      "sentiment": 0.27,
+      "label": "positive",
+      "summary": "储能业务订单饱满, 排产至明年中"
+    }
+  ],
+  "600276.SH": [
+    {
+      "title": "创新药管线进度顺利, 多款新药获批",
+      "published": "2025-03-16",
+      "source": "sample",
+      "sentiment": 0.34,
+      "label": "positive",
+      "summary": "创新药管线进度顺利, 多款新药获批"
+    },
+    {
+      "title": "集采新一轮谈判落地, 仿制药降价压力延续",
+      "published": "2025-03-17",
+      "source": "sample",
+      "sentiment": -0.3,
+      "label": "negative",
+      "summary": "集采新一轮谈判落地, 仿制药降价压力延续"
+    },
+    {
+      "title": "一季度研发投入再创新高, 占营收 18%",
+      "published": "2025-03-26",
+      "source": "sample",
+      "sentiment": 0.2,
+      "label": "positive",
+      "summary": "一季度研发投入再创新高, 占营收 18%"
+    },
+    {
+      "title": "海外授权交易突破, BD 战略转型见效",
+      "published": "2025-04-08",
+      "source": "sample",
+      "sentiment": 0.32,
+      "label": "positive",
+      "summary": "海外授权交易突破, BD 战略转型见效"
+    },
+    {
+      "title": "地缘政治不确定性, 美元资产估值承压",
+      "published": "2025-03-28",
+      "source": "sample",
+      "sentiment": -0.18,
+      "label": "negative",
+      "summary": "地缘政治不确定性, 美元资产估值承压"
+    }
+  ],
+  "601398.SH": [
+    {
+      "title": "国有大行净息差企稳, 资产质量稳健",
+      "published": "2025-03-09",
+      "source": "sample",
+      "sentiment": 0.24,
+      "label": "positive",
+      "summary": "国有大行净息差企稳, 资产质量稳健"
+    },
+    {
+      "title": "分红率维持 30%+, 股息率吸引力提升",
+      "published": "2025-04-27",
+      "source": "sample",
+      "sentiment": 0.3,
+      "label": "positive",
+      "summary": "分红率维持 30%+, 股息率吸引力提升"
+    },
+    {
+      "title": "房贷利率下行, 短期息差仍承压",
+      "published": "2025-03-24",
+      "source": "sample",
+      "sentiment": -0.18,
+      "label": "negative",
+      "summary": "房贷利率下行, 短期息差仍承压"
+    },
+    {
+      "title": "地方债置换推进, 资产结构改善",
+      "published": "2025-04-23",
+      "source": "sample",
+      "sentiment": 0.22,
+      "label": "positive",
+      "summary": "地方债置换推进, 资产结构改善"
+    },
+    {
+      "title": "零售业务转型加速, 财富管理 AUM 突破 2 万亿",
+      "published": "2025-03-12",
+      "source": "sample",
+      "sentiment": 0.26,
+      "label": "positive",
+      "summary": "零售业务转型加速, 财富管理 AUM 突破 2 万亿"
+    }
+  ]
+}

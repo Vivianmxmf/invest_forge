@@ -1,0 +1,109 @@
+"""LangGraph wiring for the InvestForge agent pipeline.
+
+The compile step is gated behind ``langgraph`` availability so unit tests
+can exercise the node logic directly via ``run_pipeline_inline`` without
+needing the LangGraph runtime installed.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Callable
+
+from invest_forge.agents.nodes import (
+    make_analyst_node,
+    make_data_fetcher_node,
+    make_output_node,
+    make_researcher_node,
+    make_risk_control_node,
+    should_revise,
+)
+from invest_forge.agents.state import InvestState, empty_state
+from invest_forge.knowledge_base.retriever import HybridRetriever
+from invest_forge.llm.client import LLMClient
+from invest_forge.tools.data_tools import DataProvider
+from invest_forge.tools.sentiment import Sentiment
+
+
+@dataclass
+class GraphDeps:
+    """Bundle of dependencies the agents need; injected by the caller."""
+
+    llm: LLMClient
+    data_provider: DataProvider
+    sentiment: Sentiment
+    retriever: HybridRetriever | None = None
+    max_iterations: int = 2
+
+
+# ───────────────────── LangGraph build ─────────────────────
+
+def build_invest_graph(deps: GraphDeps):  # pragma: no cover - exercised by integration tests
+    """Compile a LangGraph StateGraph; requires the ``langgraph`` package."""
+    from langgraph.graph import END, StateGraph
+
+    data_fetcher = make_data_fetcher_node(deps.data_provider, deps.sentiment, deps.retriever)
+    researcher = make_researcher_node(deps.llm)
+    analyst = make_analyst_node(deps.llm)
+    risk_control = make_risk_control_node(deps.llm)
+    output = make_output_node()
+
+    graph = StateGraph(InvestState)
+    graph.add_node("data_fetcher", data_fetcher)
+    graph.add_node("researcher", researcher)
+    graph.add_node("analyst", analyst)
+    graph.add_node("risk_control", risk_control)
+    graph.add_node("output", output)
+
+    graph.set_entry_point("data_fetcher")
+    graph.add_edge("data_fetcher", "researcher")
+    graph.add_edge("researcher", "analyst")
+    graph.add_edge("analyst", "risk_control")
+    graph.add_conditional_edges(
+        "risk_control",
+        lambda s: should_revise(s, max_iterations=deps.max_iterations),
+        {"revise": "analyst", "finalize": "output"},
+    )
+    graph.add_edge("output", END)
+
+    return graph.compile()
+
+
+# ───────────────────── In-process runner ─────────────────────
+
+def run_pipeline_inline(deps: GraphDeps, *, ts_code: str) -> InvestState:
+    """Execute the same DAG without LangGraph (for tests + simple scripts).
+
+    Same edges, same conditional revision loop, no asyncio.
+    """
+    data_fetcher = make_data_fetcher_node(deps.data_provider, deps.sentiment, deps.retriever)
+    researcher = make_researcher_node(deps.llm)
+    analyst = make_analyst_node(deps.llm)
+    risk_control = make_risk_control_node(deps.llm)
+    output = make_output_node()
+
+    state: InvestState = empty_state()
+    state["ts_code"] = ts_code
+
+    state = _merge(state, data_fetcher(state))
+    state = _merge(state, researcher(state))
+
+    while True:
+        state = _merge(state, analyst(state))
+        state = _merge(state, risk_control(state))
+        if should_revise(state, max_iterations=deps.max_iterations) == "finalize":
+            break
+
+    state = _merge(state, output(state))
+    return state
+
+
+def _merge(state: InvestState, patch: dict[str, Any]) -> InvestState:
+    """Shallow-merge a node patch onto state with simple list accumulation."""
+    merged = dict(state)
+    for k, v in patch.items():
+        if k == "errors" and isinstance(v, list):
+            existing = list(merged.get("errors") or [])
+            merged["errors"] = existing + v
+        else:
+            merged[k] = v
+    return merged  # type: ignore[return-value]

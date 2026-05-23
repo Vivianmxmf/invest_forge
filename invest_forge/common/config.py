@@ -46,6 +46,9 @@ class LLMConfig:
     gemini_api_key: str | None
     local_base_url: str | None
     local_model: str | None
+    # When provider=local, the analyst node targets this named adapter instead
+    # of the base model.  Leave as None to use the same model for all nodes.
+    local_analyst_model: str | None = None
     temperature: float = 0.1
 
 
@@ -104,6 +107,7 @@ def get_settings() -> Settings:
         gemini_api_key=os.getenv("GEMINI_API_KEY") or None,
         local_base_url=os.getenv("LOCAL_LLM_BASE_URL") or None,
         local_model=os.getenv("LOCAL_LLM_MODEL") or None,
+        local_analyst_model=os.getenv("LOCAL_ANALYST_MODEL") or None,
         temperature=float(os.getenv("LLM_TEMPERATURE", "0.1") or "0.1"),
     )
     vector_store = VectorStoreConfig(

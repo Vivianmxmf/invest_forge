@@ -27,7 +27,9 @@ services:
 
   vllm:
     # Only schedule this on the server (requires nvidia-container-toolkit).
-    image: vllm/vllm-openai:v0.5.4
+    # Image v0.6.3+ is required for Qwen2.5 + LoRA adapter support.
+    # v0.6.x added robust multi-LoRA serving via --enable-lora.
+    image: vllm/vllm-openai:v0.6.3
     profiles: [vllm, all]
     container_name: invest_forge_vllm
     restart: unless-stopped
@@ -39,16 +41,22 @@ services:
       - "${VLLM_PORT:-8000}:8000"
     volumes:
       - ${HF_CACHE:-./models}:/root/.cache/huggingface
+      # Mount the LoRA adapter directory into the container.
+      # On the server: export LORA_ADAPTERS_DIR=./models/adapters
+      - ${LORA_ADAPTERS_DIR:-./models/adapters}:/adapters
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
+              # Qwen2.5-7B fits comfortably on a single A5000 (24 GB).
+              # Set count: 8 and add --tensor-parallel-size 8 to use all GPUs.
+              # The remaining 7 cards stay free for LoRA training jobs.
               count: 1
               capabilities: [gpu]
     command:
       - --model
-      - ${LOCAL_LLM_MODEL:-Qwen/Qwen1.5-1.8B-Chat}
+      - ${LOCAL_LLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
       - --host
       - "0.0.0.0"
       - --port
@@ -57,6 +65,15 @@ services:
       - "0.85"
       - --max-model-len
       - "4096"
+      # LoRA serving: registers the investforge-analyst adapter at startup.
+      # LORA_ADAPTER_PATH defaults to /adapters/investforge-analyst (the mount
+      # point above).  Train the adapter first (finetune/train_lora.py) before
+      # starting this service or vLLM will fail to find the adapter files.
+      - --enable-lora
+      - --max-lora-rank
+      - "16"
+      - --lora-modules
+      - investforge-analyst=${LORA_ADAPTER_PATH:-/adapters/investforge-analyst}
 
 volumes:
   qdrant_storage:

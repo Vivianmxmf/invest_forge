@@ -82,10 +82,17 @@ The dashboard runs against ``LLM_PROVIDER=fake`` (deterministic canned
 responses) and reads the synthetic sample dataset.  Drop in real keys
 later by editing ``.env``.
 
-## Quick start — server (4× A5000 24G, CUDA 12.4)
+## Quick start — server (8× A5000 24G, CUDA 12.2)
+
+> **Hardware:** node1.athena — 8× NVIDIA RTX A5000 24 GB, Driver 535.154.05,
+> CUDA 12.2.  Use `cu121` wheels (not `cu124`).
 
 ```bash
 bash scripts/server_migrate.sh      # idempotent; ~5 min on a fast link
+
+# Install GPU stack (cu121 — required for driver 535):
+pip install -r requirements-gpu.txt \
+    --extra-index-url https://download.pytorch.org/whl/cu121
 
 # After it finishes:
 #   • conda env 'invest_forge' (Py 3.11)
@@ -96,7 +103,7 @@ bash scripts/server_migrate.sh      # idempotent; ~5 min on a fast link
 make api          # FastAPI on :8001
 make dashboard    # Streamlit on :8501
 
-# Optional vLLM (self-hosted Qwen-1.5B / 7B):
+# Optional vLLM (self-hosted Qwen2.5-7B + investforge-analyst LoRA adapter):
 docker compose --profile vllm up -d
 ```
 
@@ -104,8 +111,11 @@ docker compose --profile vllm up -d
 > Pull them manually after editing ``.env``:
 > ```bash
 > huggingface-cli login
-> huggingface-cli download Qwen/Qwen1.5-1.8B-Chat
+> huggingface-cli download Qwen/Qwen2.5-7B-Instruct
 > ```
+>
+> See [`docs/W2_LORA_RUNBOOK.md`](docs/W2_LORA_RUNBOOK.md) for the full
+> LoRA fine-tuning + adapter serving workflow.
 
 ---
 
@@ -114,8 +124,11 @@ docker compose --profile vllm up -d
 | Key                              | Purpose                                            |
 |----------------------------------|----------------------------------------------------|
 | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` | Pick one for the LLM layer |
-| `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_MODEL` | Use a self-hosted vLLM endpoint |
+| `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_MODEL` | Use a self-hosted vLLM endpoint (`Qwen/Qwen2.5-7B-Instruct`) |
+| `LOCAL_ANALYST_MODEL`            | LoRA adapter name for the analyst node (`investforge-analyst`); other nodes use the base model |
+| `LORA_ADAPTERS_DIR` / `LORA_ADAPTER_PATH` | Host adapter dir + in-container adapter path for docker-compose |
 | `LLM_PROVIDER`                   | `fake` (default) / `openai` / `anthropic` / `local` |
+| `TEACHER_LLM_PROVIDER` / `TEACHER_OPENAI_API_KEY` | Teacher model for SFT dataset distillation |
 | `TUSHARE_TOKEN`                  | Real fundamental + news data on the server         |
 | `QDRANT_URL` / `QDRANT_COLLECTION` | Production knowledge-base location              |
 | `EMBEDDING_MODEL` / `RERANKER_MODEL` | bge-small-zh + bge-reranker-v2-m3              |
@@ -147,12 +160,12 @@ pytest -q
 
 ## Roadmap (4-week sprint)
 
-| Week | Deliverable                                              | Status |
-|------|----------------------------------------------------------|--------|
-| W1   | Fundamental analysis report on a single A-share name     | ⏳ on user |
-| W2   | LoRA fine-tune of Qwen-1.5B + vLLM endpoint              | ⏳ server |
-| W3   | Hybrid RAG + RAGAS Faithfulness ≥ 0.8                    | ✅ stub eval ready |
-| W4   | 5-ticker end-to-end + alphalens backtest dashboard       | ✅ skeleton ready |
+| Week | Deliverable                                                          | Status |
+|------|----------------------------------------------------------------------|--------|
+| W1   | Fundamental analysis report on a single A-share name                 | ⏳ on user |
+| W2   | LoRA distill of Qwen2.5-7B analyst + vLLM adapter serving + routing | ✅ see [docs/W2_LORA_RUNBOOK.md](docs/W2_LORA_RUNBOOK.md) |
+| W3   | Hybrid RAG + RAGAS Faithfulness ≥ 0.8                                | ✅ stub eval ready |
+| W4   | 5-ticker end-to-end + alphalens backtest dashboard                   | ✅ skeleton ready |
 
 ---
 

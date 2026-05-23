@@ -26,12 +26,19 @@ from invest_forge.tools.sentiment import Sentiment
 
 @dataclass
 class GraphDeps:
-    """Bundle of dependencies the agents need; injected by the caller."""
+    """Bundle of dependencies the agents need; injected by the caller.
+
+    ``analyst_client`` is optional.  When set (provider=local AND
+    LOCAL_ANALYST_MODEL is configured) the analyst node uses this client so it
+    targets the LoRA adapter while researcher + risk-control keep the base
+    model client.  Defaults to ``None``, in which case all nodes share ``llm``.
+    """
 
     llm: LLMClient
     data_provider: DataProvider
     sentiment: Sentiment
     retriever: HybridRetriever | None = None
+    analyst_client: LLMClient | None = None
     max_iterations: int = 2
 
 
@@ -41,9 +48,13 @@ def build_invest_graph(deps: GraphDeps):  # pragma: no cover - exercised by inte
     """Compile a LangGraph StateGraph; requires the ``langgraph`` package."""
     from langgraph.graph import END, StateGraph
 
+    # Use the dedicated analyst client when one is configured, otherwise fall
+    # back to the shared llm so existing behaviour is unchanged.
+    _analyst_llm = deps.analyst_client if deps.analyst_client is not None else deps.llm
+
     data_fetcher = make_data_fetcher_node(deps.data_provider, deps.sentiment, deps.retriever)
     researcher = make_researcher_node(deps.llm)
-    analyst = make_analyst_node(deps.llm)
+    analyst = make_analyst_node(_analyst_llm)
     risk_control = make_risk_control_node(deps.llm)
     output = make_output_node()
 
@@ -75,9 +86,13 @@ def run_pipeline_inline(deps: GraphDeps, *, ts_code: str) -> InvestState:
 
     Same edges, same conditional revision loop, no asyncio.
     """
+    # Use the dedicated analyst client when one is configured, otherwise fall
+    # back to the shared llm so existing behaviour is unchanged.
+    _analyst_llm = deps.analyst_client if deps.analyst_client is not None else deps.llm
+
     data_fetcher = make_data_fetcher_node(deps.data_provider, deps.sentiment, deps.retriever)
     researcher = make_researcher_node(deps.llm)
-    analyst = make_analyst_node(deps.llm)
+    analyst = make_analyst_node(_analyst_llm)
     risk_control = make_risk_control_node(deps.llm)
     output = make_output_node()
 

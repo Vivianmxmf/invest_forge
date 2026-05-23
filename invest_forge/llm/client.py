@@ -74,3 +74,33 @@ def build_client(config: LLMConfig | None = None) -> LLMClient:
             temperature=cfg.temperature,
         )
     raise ValueError(f"unsupported LLM provider: {provider}")
+
+
+def build_analyst_client(config: LLMConfig | None = None) -> LLMClient:
+    """Return an LLMClient pointed at the analyst adapter.
+
+    Only diverges from ``build_client`` when the provider is ``local`` AND
+    ``local_analyst_model`` is set (e.g. the ``investforge-analyst`` LoRA
+    adapter name registered with vLLM).  All other providers — ``fake``,
+    ``openai``, ``anthropic`` — fall through to the default client unchanged,
+    keeping backward compatibility when running offline or against cloud APIs.
+    """
+    cfg = config or get_settings().llm
+    if cfg.provider.lower() == "local" and cfg.local_analyst_model:
+        from invest_forge.llm.openai_client import OpenAILLMClient
+
+        if not cfg.local_base_url:
+            raise ValueError("LLM_PROVIDER=local requires LOCAL_LLM_BASE_URL")
+        logger.info(
+            "analyst client → local adapter %s at %s",
+            cfg.local_analyst_model,
+            cfg.local_base_url,
+        )
+        return OpenAILLMClient(
+            model=cfg.local_analyst_model,
+            api_key=cfg.openai_api_key or "EMPTY",
+            base_url=cfg.local_base_url,
+            temperature=cfg.temperature,
+        )
+    # No analyst-specific override; reuse the default client.
+    return build_client(cfg)

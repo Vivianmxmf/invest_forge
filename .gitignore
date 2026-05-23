@@ -38,6 +38,7 @@ htmlcov/
 data/raw/*
 data/pdfs/*
 data/kb/*
+data/sft/*
 !data/sample/
 !data/raw/.gitkeep
 !data/pdfs/.gitkeep

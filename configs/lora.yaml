@@ -1,0 +1,93 @@
+# InvestForge analyst LoRA fine-tune configuration
+# ====================================================
+# Run with:
+#   python finetune/train_lora.py --config configs/lora.yaml
+#
+# Requires the GPU stack from requirements-gpu.txt.
+# Dry-run (no GPU / torch needed):
+#   python finetune/train_lora.py --config configs/lora.yaml --dry-run
+
+# ---------------------------------------------------------------------------
+# Model
+# ---------------------------------------------------------------------------
+base_model: "Qwen/Qwen2.5-7B-Instruct"
+adapter_name: "investforge-analyst"
+
+# ---------------------------------------------------------------------------
+# Output
+# ---------------------------------------------------------------------------
+# Adapter weights are written here (gitignored via models/).
+output_dir: "models/adapters/investforge-analyst"
+
+# ---------------------------------------------------------------------------
+# Data
+# ---------------------------------------------------------------------------
+train_data: "data/sft/train.jsonl"
+val_data:   "data/sft/val.jsonl"
+# Maximum sequence length in tokens fed to the model.
+max_seq_len: 2048
+
+# ---------------------------------------------------------------------------
+# QLoRA quantisation  (BitsAndBytesConfig)
+# ---------------------------------------------------------------------------
+load_in_4bit: true
+bnb_4bit_quant_type: "nf4"              # Normal Float 4 — best for LLM weights
+bnb_4bit_double_quant: true             # Double quantisation saves ~0.4 bits/param
+bnb_4bit_compute_dtype: "bfloat16"      # BF16 for forward/backward; avoids FP16 overflow
+
+# ---------------------------------------------------------------------------
+# LoRA  (LoraConfig)
+# ---------------------------------------------------------------------------
+lora_r: 16                              # Rank — higher = more capacity, more VRAM
+lora_alpha: 32                          # Scaling factor; effective LR ∝ alpha/r
+lora_dropout: 0.05
+# Qwen2.5 attention + MLP projection names (verified against HF model card).
+# q_proj, k_proj, v_proj, o_proj — attention
+# gate_proj, up_proj, down_proj — MLP (SwiGLU)
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+bias: "none"                            # Typically "none" for QLoRA
+task_type: "CAUSAL_LM"
+
+# ---------------------------------------------------------------------------
+# Training  (SFTConfig / TrainingArguments)
+# ---------------------------------------------------------------------------
+num_train_epochs: 3
+per_device_train_batch_size: 4
+per_device_eval_batch_size: 4
+gradient_accumulation_steps: 4         # Effective batch = 4 × 4 = 16
+learning_rate: 2.0e-4
+lr_scheduler_type: "cosine"
+warmup_ratio: 0.03
+weight_decay: 0.01
+max_grad_norm: 1.0
+
+# Memory / speed
+gradient_checkpointing: true           # Essential for 7B on 24 GB VRAM
+optim: "paged_adamw_8bit"              # BnB paged AdamW for low VRAM
+fp16: false
+bf16: true                             # BF16 is stable on A5000
+
+# Logging + checkpointing
+logging_steps: 10
+save_steps: 50
+eval_steps: 50
+eval_strategy: "steps"
+save_total_limit: 2                    # Keep only the last 2 checkpoints
+load_best_model_at_end: true
+metric_for_best_model: "eval_loss"
+report_to: "none"                      # Set to "wandb" or "tensorboard" on server
+
+# ---------------------------------------------------------------------------
+# Misc
+# ---------------------------------------------------------------------------
+seed: 42
+dataloader_num_workers: 2
+remove_unused_columns: false            # Required for custom dataset columns
+packing: false                          # Disable packing; our examples are short

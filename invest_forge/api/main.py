@@ -16,7 +16,7 @@ from invest_forge.common.config import get_settings
 from invest_forge.common.logging_setup import get_logger
 from invest_forge.knowledge_base.builder import build_in_memory
 from invest_forge.knowledge_base.retriever import HybridRetriever
-from invest_forge.llm.client import build_client
+from invest_forge.llm.client import build_analyst_client, build_client
 from invest_forge.tools.data_tools import build_provider
 from invest_forge.tools.sentiment import build_sentiment
 
@@ -154,13 +154,27 @@ def _try_qdrant_retriever(settings) -> HybridRetriever | None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    default_client = build_client()
+    # Only attach a distinct analyst_client when there's a real override
+    # (provider=local AND LOCAL_ANALYST_MODEL set).  Otherwise leave it None so
+    # GraphDeps' ``analyst_client or llm`` fallback keeps every node on the
+    # default client — identical behaviour to fake/openai/anthropic today.
+    if settings.llm.provider == "local" and settings.llm.local_analyst_model:
+        analyst_client = build_analyst_client(settings.llm)
+    else:
+        analyst_client = None
     app.state.deps = GraphDeps(
-        llm=build_client(),
+        llm=default_client,
         data_provider=build_provider(prefer_real=bool(settings.tushare_token)),
         sentiment=build_sentiment(prefer_real=False),
         retriever=_select_retriever(settings),
+        analyst_client=analyst_client,
     )
-    logger.info("InvestForge API ready (LLM=%s)", app.state.deps.llm.name)
+    logger.info(
+        "InvestForge API ready (LLM=%s, analyst=%s)",
+        app.state.deps.llm.name,
+        app.state.deps.analyst_client.name if app.state.deps.analyst_client else "shared",
+    )
     yield
 
 

@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # scripts/server_migrate.sh — one-shot InvestForge server migration.
 #
-# Hardware target (verified separately by the user):  4× NVIDIA RTX A5000 24GB,
-# CUDA 12.4, Driver 550.67.  This is comfortably enough memory to fine-tune
-# Qwen-1.5B with QLoRA *and* serve it through vLLM on a single card while the
-# other three remain free for ad-hoc work.
+# Hardware target (node1.athena — verified 2026-05):
+#   8× NVIDIA RTX A5000 24 GB, Driver 535.154.05, CUDA 12.2.
+#   NOTE: driver 535.x caps the supported CUDA runtime at 12.2 — PyTorch
+#   cu124 wheels will NOT load.  All GPU packages must use cu121 wheels.
+#   Qwen2.5-7B fits on a single A5000; 7 cards remain free for training.
 #
 # What it does, in order:
 #   0. Pre-flight (OS / Python / conda / Docker / GPU / disk).
@@ -268,26 +269,37 @@ heading "6. GPU stack (finetune + vLLM serving)"
 
 if (( HAS_GPU == 1 )); then
     step "installing GPU-only dependencies (this is heavy)"
-    # Stick to CUDA 12.4 since the driver is 550.67.
-    pip install --upgrade \
-        "torch==2.4.*" \
-        "transformers>=4.41" \
-        "accelerate>=0.30" \
-        "peft>=0.11" \
-        "trl>=0.9" \
-        "bitsandbytes>=0.43"
-    # vLLM in a separate step so its CUDA-tied wheel doesn't conflict above.
-    if ! pip install --upgrade "vllm>=0.5,<0.6"; then
-        note_warn "vLLM install failed (often needs --extra-index-url for cu124).
-Manual recovery:
-    pip install vllm==0.5.5 --extra-index-url https://download.pytorch.org/whl/cu124"
+    # Driver 535.154.05 caps CUDA at 12.2 → must use cu121 wheels.
+    # cu124 wheels will silently load but then crash at import time.
+    GPU_INDEX_URL="https://download.pytorch.org/whl/cu121"
+
+    if [[ -f requirements-gpu.txt ]]; then
+        step "installing from requirements-gpu.txt (cu121)"
+        pip install -r requirements-gpu.txt --extra-index-url "$GPU_INDEX_URL"
     else
-        note_ok "vLLM installed"
+        note_warn "requirements-gpu.txt not found — falling back to inline GPU pins"
+        pip install --upgrade \
+            --extra-index-url "$GPU_INDEX_URL" \
+            "torch>=2.3,<2.5" \
+            "transformers>=4.41" \
+            "accelerate>=0.30" \
+            "peft>=0.11" \
+            "trl>=0.9" \
+            "bitsandbytes>=0.43"
+        # vLLM in a separate step so its CUDA-tied wheel doesn't conflict above.
+        if ! pip install --upgrade --extra-index-url "$GPU_INDEX_URL" "vllm>=0.6.3"; then
+            note_warn "vLLM install failed.
+Manual recovery:
+    pip install 'vllm>=0.6.3' --extra-index-url $GPU_INDEX_URL"
+        else
+            note_ok "vLLM installed"
+        fi
     fi
+
     note_ok "GPU finetune + serving stack ready (no weights downloaded — pull manually)."
     note_warn "To run vLLM with weights:
     huggingface-cli login    # one-time, if pulling gated weights
-    $COMPOSE_CMD --profile vllm up -d   # boots vLLM on port 8000"
+    $COMPOSE_CMD --profile vllm up -d   # boots vLLM + adapter on port 8000"
 else
     note_warn "No GPU detected — skipping torch/transformers/peft/trl/bitsandbytes/vllm install.
 The agent pipeline still works against OpenAI / Anthropic / Gemini APIs."
@@ -333,6 +345,26 @@ $( $USE_CONDA && echo "  conda activate $ENV_NAME" || echo "  source $REPO_ROOT/
   make api          # FastAPI on :8001
   make dashboard    # Streamlit on :8501
 
-  # (GPU only) boot vLLM:
-  docker compose --profile vllm up -d
+  # ── Week-2 LoRA workflow ──────────────────────────────────────────
+
+  # (1) Fill in .env: set LLM_PROVIDER=local, LOCAL_LLM_MODEL, LOCAL_ANALYST_MODEL,
+  #     TEACHER_LLM_PROVIDER, and any teacher API key for dataset distillation.
+
+  # (2) Build the SFT dataset (requires a teacher LLM key):
+  #     python scripts/build_sft_dataset.py --tickers 600519.SH 688981.SH \
+  #         --out-dir data/sft
+
+  # (3) Fine-tune the analyst LoRA (~16 GB on one A5000; 7 cards stay free):
+  #     python finetune/train_lora.py --config configs/lora.yaml
+
+  # (4) Evaluate the adapter:
+  #     python finetune/eval_lora.py --config configs/lora.yaml
+
+  # (5) Serve base model + adapter via vLLM:
+  #     docker compose --profile vllm up -d
+  #     # vLLM registers "investforge-analyst" adapter at startup.
+  #     # Verify: curl http://localhost:8000/v1/models
+
+  # (6) Point the app at the local endpoint and run:
+  #     make api   # then POST /analyze {"ts_code": "688981.SH"}
 EOF

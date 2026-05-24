@@ -1,4 +1,4 @@
-# InvestForge GPU stack — for the 4× NVIDIA RTX A5000 server (CUDA 12.2 / driver 535)
+# InvestForge GPU stack — for the 8× NVIDIA RTX A5000 server (CUDA 12.2 / driver 535)
 #
 # Install with:
 #   pip install -r requirements-gpu.txt \
@@ -20,7 +20,7 @@ torch==2.4.1+cu121
 transformers>=4.45,<5.0       # Qwen2.5 support landed in 4.43
 peft>=0.12,<1.0               # QLoRA / LoRA adapter management
 trl>=0.11,<1.0                # SFTTrainer used in finetune/train_lora.py
-accelerate>=0.33,<1.0         # Multi-GPU / mixed-precision helpers
+accelerate>=1.0               # Multi-GPU / mixed-precision; transformers>=4.46 calls unwrap_model(keep_torch_compile=...) which needs accelerate>=1.0
 datasets>=2.20,<4.0           # HF Dataset loading used in train_lora.py
 sentencepiece                 # Tokeniser dependency for Qwen family
 

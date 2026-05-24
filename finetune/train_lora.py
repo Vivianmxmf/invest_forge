@@ -232,7 +232,7 @@ def main(argv: list[str] | None = None) -> None:
     import torch  # type: ignore[import-untyped]
     from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training  # type: ignore[import-untyped]
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig  # type: ignore[import-untyped]
-    from trl import DataCollatorForCompletionOnlyLM, SFTConfig, SFTTrainer  # type: ignore[import-untyped]
+    from trl import SFTConfig, SFTTrainer  # type: ignore[import-untyped]
 
     logger.info("torch version: %s", torch.__version__)
     logger.info("CUDA available: %s", torch.cuda.is_available())
@@ -286,27 +286,23 @@ def main(argv: list[str] | None = None) -> None:
     # --- dataset ---
     train_ds, val_ds = _load_hf_dataset(cfg)
 
-    # Apply chat template to convert messages list → formatted string.
-    def _apply_template(example: dict[str, Any]) -> dict[str, Any]:
-        text = tokenizer.apply_chat_template(
-            example["messages"],
-            tokenize=False,
-            add_generation_prompt=False,
-        )
-        return {"text": text}
+    # Convert {"messages": [user, assistant]} into TRL's conversational
+    # *prompt-completion* format. TRL >=0.18 SFTTrainer applies the chat
+    # template itself and, with completion_only_loss=True (default), masks the
+    # prompt so loss is computed ONLY on the assistant JSON. This replaces the
+    # old manual apply_chat_template map + DataCollatorForCompletionOnlyLM,
+    # which double-process and clash with TRL 0.18's built-in ChatML pipeline.
+    def _to_prompt_completion(example: dict[str, Any]) -> dict[str, Any]:
+        msgs = example["messages"]
+        prompt = [m for m in msgs if m.get("role") != "assistant"]
+        completion = [m for m in msgs if m.get("role") == "assistant"]
+        return {"prompt": prompt, "completion": completion}
 
-    train_ds = train_ds.map(_apply_template, num_proc=1)
-    val_ds = val_ds.map(_apply_template, num_proc=1)
-
-    # --- completion-only loss masking ---
-    # Qwen2.5's chat template opens the assistant turn with
-    # ``<|im_start|>assistant\n``.  DataCollatorForCompletionOnlyLM masks every
-    # token up to (and including) this template so the loss is computed ONLY on
-    # the assistant JSON, never on the prompt tokens.
-    response_template = "<|im_start|>assistant\n"
-    collator = DataCollatorForCompletionOnlyLM(
-        response_template=response_template,
-        tokenizer=tokenizer,
+    train_ds = train_ds.map(
+        _to_prompt_completion, remove_columns=train_ds.column_names, num_proc=1
+    )
+    val_ds = val_ds.map(
+        _to_prompt_completion, remove_columns=val_ds.column_names, num_proc=1
     )
 
     # --- SFT training config ---
@@ -343,24 +339,25 @@ def main(argv: list[str] | None = None) -> None:
         remove_unused_columns=cfg.get("remove_unused_columns", False),
         # TRL >=0.18 renamed max_seq_length -> max_length on SFTConfig.
         max_length=cfg.get("max_seq_len", 2048),
-        dataset_text_field="text",
+        # Prompt-completion dataset → mask the prompt, train on completion only.
+        completion_only_loss=cfg.get("completion_only_loss", True),
         # Packing MUST stay off — it concatenates examples and is incompatible
         # with completion-only loss masking.
         packing=False,
     )
 
     # --- trainer ---
-    # ``data_collator`` applies completion-only masking so loss is on the
-    # assistant JSON only (the prompt tokens are masked to -100).
+    # completion_only_loss (set on SFTConfig) masks the prompt so loss is on the
+    # assistant JSON only (prompt tokens become -100).
     trainer = SFTTrainer(
         model=model,
         args=sft_cfg,
         train_dataset=train_ds,
         eval_dataset=val_ds,
         # transformers >=4.46 / TRL >=0.18 renamed the trainer's tokenizer arg
-        # to processing_class. (The collator above still takes tokenizer=.)
+        # to processing_class. No custom collator — TRL applies the chat
+        # template and completion-only masking from the prompt-completion data.
         processing_class=tokenizer,
-        data_collator=collator,
     )
 
     logger.info("Starting training …")

@@ -50,6 +50,17 @@ class LLMConfig:
     # of the base model.  Leave as None to use the same model for all nodes.
     local_analyst_model: str | None = None
     temperature: float = 0.1
+    # HuggingFace in-process provider settings (provider="hf").
+    # device_map passed to AutoModelForCausalLM.from_pretrained.
+    hf_device: str = "auto"
+    # dtype string: "auto" | "bf16" | "fp16" | "fp32".
+    hf_dtype: str = "auto"
+    # Vision VLM served at a SEPARATE vLLM endpoint (server-only).
+    # When provider=local and local_vision_model is set, build_vision_client()
+    # returns an OpenAILLMClient targeting this model; otherwise returns None
+    # and the vision node is a no-op.
+    local_vision_base_url: str | None = None
+    local_vision_model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -109,6 +120,10 @@ def get_settings() -> Settings:
         local_model=os.getenv("LOCAL_LLM_MODEL") or None,
         local_analyst_model=os.getenv("LOCAL_ANALYST_MODEL") or None,
         temperature=float(os.getenv("LLM_TEMPERATURE", "0.1") or "0.1"),
+        hf_device=os.getenv("HF_DEVICE", "auto") or "auto",
+        hf_dtype=os.getenv("HF_DTYPE", "auto") or "auto",
+        local_vision_base_url=os.getenv("LOCAL_VISION_BASE_URL") or None,
+        local_vision_model=os.getenv("LOCAL_VISION_MODEL") or None,
     )
     vector_store = VectorStoreConfig(
         url=os.getenv("QDRANT_URL", "http://localhost:6333"),

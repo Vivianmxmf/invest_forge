@@ -2,11 +2,15 @@
 
 POST /analyze {"ts_code": "688981.SH"} →
     full structured InvestState (recommendation + intermediate artifacts).
+
+Optional multimodal input:
+POST /analyze {"ts_code": "688981.SH", "images": [{"kind": "base64", "value": "..."}]}
+    → same response, with vision_analysis populated when a vision VLM is configured.
 """
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -16,15 +20,25 @@ from invest_forge.common.config import get_settings
 from invest_forge.common.logging_setup import get_logger
 from invest_forge.knowledge_base.builder import build_in_memory
 from invest_forge.knowledge_base.retriever import HybridRetriever
-from invest_forge.llm.client import build_analyst_client, build_client
+from invest_forge.llm.client import build_analyst_client, build_client, build_vision_client
 from invest_forge.tools.data_tools import build_provider
+from invest_forge.tools.image_input import ImagePolicy, ImageRef, ImageValidationError, load_images
 from invest_forge.tools.sentiment import build_sentiment
 
 logger = get_logger(__name__)
 
 
+class ImageInput(BaseModel):
+    """Caller-supplied image reference — untrusted until validated by image_input.py."""
+
+    kind: Literal["url", "base64", "path"]
+    value: str
+    mime: str | None = None
+
+
 class AnalyzeRequest(BaseModel):
     ts_code: str = Field(..., examples=["688981.SH"])
+    images: list[ImageInput] | None = None
 
 
 class AnalyzeResponse(BaseModel):
@@ -163,17 +177,22 @@ async def lifespan(app: FastAPI):
         analyst_client = build_analyst_client(settings.llm)
     else:
         analyst_client = None
+    # Vision client is None unless provider=local AND LOCAL_VISION_MODEL is set.
+    # When None, the vision node in the pipeline is a complete no-op.
+    vision_client = build_vision_client(settings.llm)
     app.state.deps = GraphDeps(
         llm=default_client,
         data_provider=build_provider(prefer_real=bool(settings.tushare_token)),
         sentiment=build_sentiment(prefer_real=False),
         retriever=_select_retriever(settings),
         analyst_client=analyst_client,
+        vision_client=vision_client,
     )
     logger.info(
-        "InvestForge API ready (LLM=%s, analyst=%s)",
+        "InvestForge API ready (LLM=%s, analyst=%s, vision=%s)",
         app.state.deps.llm.name,
         app.state.deps.analyst_client.name if app.state.deps.analyst_client else "shared",
+        app.state.deps.vision_client.name if app.state.deps.vision_client else "disabled",
     )
     yield
 
@@ -190,7 +209,23 @@ def health() -> dict[str, Any]:
 def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
     if not req.ts_code or "." not in req.ts_code:
         raise HTTPException(status_code=422, detail="ts_code must be like '688981.SH'")
-    state = run_pipeline_inline(app.state.deps, ts_code=req.ts_code)
+
+    # Validate and convert any supplied images.
+    input_images: list[str] = []
+    if req.images:
+        refs = [ImageRef(kind=img.kind, value=img.value, mime=img.mime) for img in req.images]
+        try:
+            validated = load_images(refs, ImagePolicy.from_env())
+        except ImageValidationError:
+            # Generic 400 — do NOT leak the validator's internal message.
+            raise HTTPException(status_code=400, detail="invalid image input")
+        input_images = [v.data_url for v in validated]
+
+    state = run_pipeline_inline(
+        app.state.deps,
+        ts_code=req.ts_code,
+        input_images=input_images or None,
+    )
     return AnalyzeResponse(
         ts_code=req.ts_code,
         final_recommendation=state.get("final_recommendation", {}),

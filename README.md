@@ -119,6 +119,32 @@ docker compose --profile vllm up -d
 
 ---
 
+## Multimodal vision (report / chart images)
+
+InvestForge can analyse research-report screenshots, K-line charts, and
+financial diagrams by routing them through a dedicated vision VLM
+(`Qwen/Qwen2.5-VL-7B-Instruct`) served at a separate vLLM endpoint.
+
+**The feature is INERT by default** — set `LOCAL_VISION_MODEL` in `.env` to
+activate it.  When unset, the pipeline behaves exactly as before.
+
+```bash
+# POST a base64-encoded PNG alongside the ticker:
+curl -X POST http://localhost:8001/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"ts_code":"688981.SH","images":[{"kind":"base64","value":"<B64>"}]}'
+```
+
+Images are validated by a SSRF-hardened security layer before any processing:
+https-only URLs, IP-pinned fetching (no DNS rebinding), decompression-bomb
+guards, and a format allowlist (PNG / JPEG / WEBP).  Local file paths are
+**disabled by default** (`VISION_ALLOW_LOCAL_PATHS=false`).
+
+See [`docs/VISION_RUNBOOK.md`](docs/VISION_RUNBOOK.md) for the full setup,
+boot commands, and security model.
+
+---
+
 ## Environment variables (`.env.example`)
 
 | Key                              | Purpose                                            |
@@ -126,6 +152,9 @@ docker compose --profile vllm up -d
 | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` | Pick one for the LLM layer |
 | `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_MODEL` | Use a self-hosted vLLM endpoint (`Qwen/Qwen2.5-7B-Instruct`) |
 | `LOCAL_ANALYST_MODEL`            | LoRA adapter name for the analyst node (`investforge-analyst`); other nodes use the base model |
+| `LOCAL_VISION_BASE_URL` / `LOCAL_VISION_MODEL` | Vision VLM endpoint + model (`Qwen/Qwen2.5-VL-7B-Instruct`); leave blank to disable vision |
+| `VISION_ALLOW_LOCAL_PATHS`       | `false` (safe default) — set `true` only in trusted environments |
+| `VISION_MAX_IMAGES` / `VISION_MAX_BYTES` / `VISION_MAX_PIXELS` | Image input policy |
 | `LORA_ADAPTERS_DIR` / `LORA_ADAPTER_PATH` | Host adapter dir + in-container adapter path for docker-compose |
 | `LLM_PROVIDER`                   | `fake` (default) / `openai` / `anthropic` / `local` |
 | `TEACHER_LLM_PROVIDER` / `TEACHER_OPENAI_API_KEY` | Teacher model for SFT dataset distillation |

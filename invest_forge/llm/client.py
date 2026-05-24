@@ -19,6 +19,10 @@ logger = get_logger(__name__)
 class ChatMessage:
     role: str           # "system" | "user" | "assistant"
     content: str
+    # Tuple of data-URL strings (data:<mime>;base64,...) for vision payloads.
+    # Empty tuple == text-only message; default keeps every existing
+    # construction unchanged.
+    images: tuple[str, ...] = ()
 
 
 @dataclass
@@ -73,7 +77,46 @@ def build_client(config: LLMConfig | None = None) -> LLMClient:
             base_url=cfg.local_base_url,
             temperature=cfg.temperature,
         )
+    if provider in ("hf", "huggingface", "transformers"):
+        from invest_forge.llm.hf_client import HFLLMClient
+
+        logger.info("LLM provider = hf (in-process HuggingFace model: %s)", cfg.model)
+        return HFLLMClient(
+            model=cfg.model,
+            device=cfg.hf_device,
+            dtype=cfg.hf_dtype,
+            temperature=cfg.temperature,
+        )
     raise ValueError(f"unsupported LLM provider: {provider}")
+
+
+def build_vision_client(cfg: LLMConfig) -> LLMClient | None:
+    """Return a vision-capable LLMClient when configured, otherwise None.
+
+    A vision client is ONLY constructed when:
+      * ``cfg.provider == "local"``  (server-side vLLM path), AND
+      * ``cfg.local_vision_model`` is set.
+
+    When either condition is not met the function returns ``None`` and the
+    vision node becomes a no-op, keeping the graph behaviour identical to
+    how it ran before the multimodal feature was added.
+    """
+    if cfg.provider.lower() != "local" or not cfg.local_vision_model:
+        return None
+    from invest_forge.llm.openai_client import OpenAILLMClient
+
+    base_url = cfg.local_vision_base_url or cfg.local_base_url
+    logger.info(
+        "vision client → local model %s at %s",
+        cfg.local_vision_model,
+        base_url,
+    )
+    return OpenAILLMClient(
+        model=cfg.local_vision_model,
+        api_key=cfg.openai_api_key or "EMPTY",
+        base_url=base_url,
+        temperature=cfg.temperature,
+    )
 
 
 def build_analyst_client(config: LLMConfig | None = None) -> LLMClient:

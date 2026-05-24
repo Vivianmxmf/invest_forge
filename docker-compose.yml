@@ -75,5 +75,49 @@ services:
       - --lora-modules
       - investforge-analyst=${LORA_ADAPTER_PATH:-/adapters/investforge-analyst}
 
+  vllm-vision:
+    # Vision VLM — Qwen2.5-VL-7B-Instruct served at port 8002.
+    # The text vLLM (:8000) and vision vLLM (:8002) each occupy ONE of the
+    # 8× NVIDIA RTX A5000 24 GB cards; the remaining six stay free for
+    # LoRA training jobs and other workloads.
+    #
+    # NOTE: Qwen2.5-VL requires vLLM >= 0.7.2 (the text service can stay on
+    # 0.6.3, but Qwen2.5-VL support landed in 0.7.2). Pin a VL-capable tag and
+    # bump as needed — verify the model loads via `curl :8002/v1/models`.
+    image: vllm/vllm-openai:v0.7.3
+    profiles: [vllm, all]
+    container_name: invest_forge_vllm_vision
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      HUGGING_FACE_HUB_TOKEN: ${HUGGING_FACE_HUB_TOKEN:-}
+    ports:
+      - "${VLLM_VISION_PORT:-8002}:8000"
+    volumes:
+      - ${HF_CACHE:-./models}:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              # One A5000 (24 GB) is sufficient for Qwen2.5-VL-7B-Instruct.
+              count: 1
+              capabilities: [gpu]
+    command:
+      - --model
+      - ${LOCAL_VISION_MODEL:-Qwen/Qwen2.5-VL-7B-Instruct}
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --gpu-memory-utilization
+      - "0.85"
+      - --max-model-len
+      - "8192"
+      # Limit the number of image tokens per prompt (decompression safety).
+      - --limit-mm-per-prompt
+      - "image=4"
+
 volumes:
   qdrant_storage:

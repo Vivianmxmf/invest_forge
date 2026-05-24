@@ -4,6 +4,79 @@ All version-level changes to InvestForge are documented here.
 
 ---
 
+## [0.3.0] - 2026-05-24
+
+### Features
+
+- **Multimodal vision via uploaded report images:** The `/analyze` endpoint
+  now accepts an optional `images` list (`kind: "url" | "base64" | "path"`,
+  `value`, `mime`).  Supplied images are validated by the SSRF-hardened
+  `image_input.py` security layer and forwarded to a dedicated vision VLM
+  for analysis before the researcher node runs.
+
+- **SSRF-hardened image validator:** `invest_forge/tools/image_input.py`
+  provides `load_images(refs, policy) -> list[ValidatedImage]` with full
+  threat mitigation: https-only scheme allowlist, IP-pinned fetching (no
+  DNS-rebinding TOCTOU window), decompression-bomb guards (`max_bytes` before
+  decode, `max_pixels` before raster), format allowlist (PNG/JPEG/WEBP only),
+  and local-path containment (`VISION_ALLOW_LOCAL_PATHS=false` by default).
+
+- **Vision vLLM serving:** New `vllm-vision` service in `docker-compose.yml`
+  (profiles: `vllm`, `all`) runs `Qwen/Qwen2.5-VL-7B-Instruct` at host port
+  8002 (`VLLM_VISION_PORT`), with `--limit-mm-per-prompt image=4` and
+  `--max-model-len 8192`.  Text vLLM (:8000) and vision vLLM (:8002) each
+  occupy one of the 4× A5000 cards.
+
+- **Gated vision node:** `make_vision_node(client)` in `nodes.py` is a
+  complete no-op when `client is None` or when `state["input_images"]` is
+  empty, so the graph is unchanged for all non-vision requests.  Vision
+  analysis is appended to the researcher prompt only when non-empty.
+
+- **`ChatMessage.images` tuple:** `ChatMessage` gains an `images: tuple[str, ...]`
+  field (default `()`) carrying data-URL strings for the vision payload.
+  Existing code constructing `ChatMessage` without `images` is unchanged.
+
+- **`build_vision_client`:** New factory in `llm/client.py`; returns an
+  `OpenAILLMClient` targeting the vision endpoint only when
+  `provider=local` and `local_vision_model` is set; otherwise `None`.
+
+### Design Rationale
+
+- **Vision isolated to one node + a dedicated VLM client:** The vision
+  analysis step is cleanly separated from the text pipeline.  The vision
+  client is a distinct `OpenAILLMClient` pointing at the separate vLLM
+  endpoint so model routing, GPU allocation, and failure modes are
+  independent from the text LLM.
+
+- **`ChatMessage` extended backward-compatibly:** The `images` field has
+  `default=()` so every existing `ChatMessage(role=..., content=...)` call
+  compiles and behaves identically.  `_to_openai_messages` in
+  `openai_client.py` emits a plain string `content` when `images` is empty —
+  byte-identical to the pre-vision wire format.
+
+- **Security-first input validation:** All image input flows through
+  `image_input.py` before any data reaches the VLM.  The `load_images` API
+  is the single choke point; error messages are generic to prevent
+  information leakage.
+
+- **Graph topology preserved for non-vision runs:** The vision node is only
+  wired into `build_invest_graph` / `run_pipeline_inline` when
+  `deps.vision_client is not None`.  All existing graph tests pass unchanged
+  because their `GraphDeps` fixtures do not supply a `vision_client`.
+
+### Notes & Caveats
+
+- The vision VLM (`Qwen/Qwen2.5-VL-7B-Instruct`) runs server-side only.
+  Laptop/offline mode (`LLM_PROVIDER=fake`) uses a canned response for
+  the `[视觉] [Vision]` prompt marker so the full pipeline can be exercised
+  without a GPU or API key.
+- `VISION_ALLOW_LOCAL_PATHS=false` is the safe default.  Enable only in a
+  trusted, isolated environment with a strictly controlled upload directory.
+- The vision feature is completely inert when `LOCAL_VISION_MODEL` is unset:
+  no extra latency, no graph topology change, no new error paths.
+
+---
+
 ## [0.2.0] - 2026-05-23
 
 ### Features

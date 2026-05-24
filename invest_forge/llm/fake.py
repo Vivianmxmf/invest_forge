@@ -68,6 +68,16 @@ _DEFAULT_RESPONSES: list[tuple[re.Pattern[str], str]] = [
         "InvestForge 输出报告: 建议买入, 置信度 0.72, 目标价 168.5.",
     ),
     (
+        # Vision node prompt is tagged with these markers.
+        re.compile(r"\[视觉\]|\[Vision\]", re.I),
+        (
+            "**图像分析摘要**\n\n"
+            "关键财务数据: 营收 432 亿元(+22%), 净利率 15.1%, ROE 17%.\n"
+            "图表趋势: K 线呈震荡上行态势, 成交量温和放大, 均线多头排列.\n"
+            "风险提示: 报告中标注了客户集中度风险及海外汇率敞口风险."
+        ),
+    ),
+    (
         # Researcher catch-all comes LAST so it doesn't eat the analyst /
         # risk-control prompts that incidentally quote "研究员".
         re.compile(r"\[研究员\]|\[Researcher\]|research memo", re.I),

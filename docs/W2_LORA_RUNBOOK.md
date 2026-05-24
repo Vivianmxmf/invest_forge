@@ -87,7 +87,16 @@ python scripts/build_sft_dataset.py \
 tickers). `--with-revisions` adds a second example per ticker carrying
 synthetic risk-control feedback, teaching the analyst the revision path.
 The teacher is chosen by `--teacher-provider` (defaults to
-`TEACHER_LLM_PROVIDER` → `LLM_PROVIDER`).
+`TEACHER_LLM_PROVIDER` -> `LLM_PROVIDER`).
+
+**Teacher options:**
+
+| Option | Command / Config | API key needed? | Notes |
+|--------|-----------------|-----------------|-------|
+| (a) Cloud — OpenAI | `--teacher-provider openai` + `TEACHER_OPENAI_API_KEY=sk-...` | Yes | Best reasoning quality; `gpt-4o` default |
+| (a) Cloud — Anthropic | `--teacher-provider anthropic` + `TEACHER_ANTHROPIC_API_KEY=...` | Yes | Strong alternative; `claude-sonnet-4-5` default |
+| (b) HF in-process | `--teacher-provider hf` | **No** | Loads model directly in Python on one GPU card; default `Qwen/Qwen2.5-7B-Instruct`.  Set `HF_DEVICE=cuda:1` to pick a specific card.  No API key or separate server required.  Note: teacher should be >= student in capability; same-size <8B is useful for format/self-distillation but a larger cloud model yields richer reasoning traces. |
+| (c) Local vLLM | `--teacher-provider local` + `LOCAL_LLM_BASE_URL=http://...` | No (local) | OpenAI-compatible endpoint; teacher reuses the vLLM server from Step 6 |
 
 Output: `data/sft/train.jsonl` and `data/sft/val.jsonl`, chat-format records
 `{"messages": [{"role": "user", ...}, {"role": "assistant", ...}]}` where the

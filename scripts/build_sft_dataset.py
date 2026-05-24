@@ -161,9 +161,18 @@ def _resolve_teacher_provider(teacher_provider: str | None) -> str:
 
 
 # Sensible strong-teacher defaults when ``TEACHER_LLM_MODEL`` is not set.
+# "hf" targets Qwen2.5-7B-Instruct: a strong, Chinese-capable <8B instruct model
+# well-suited for A-share Chinese prompts; runs in-process on the GPU server
+# with no API key required.  Note that for maximum distillation quality the
+# teacher should be >= the student in capability; a same-size <8B teacher is
+# useful for format/self-distillation but a larger cloud model (openai/anthropic)
+# will typically produce higher-quality reasoning traces.
 _DEFAULT_TEACHER_MODELS = {
     "openai": "gpt-4o",
     "anthropic": "claude-sonnet-4-5",
+    "hf": "Qwen/Qwen2.5-7B-Instruct",
+    "huggingface": "Qwen/Qwen2.5-7B-Instruct",
+    "transformers": "Qwen/Qwen2.5-7B-Instruct",
     "fake": "fake-llm",
 }
 
@@ -209,6 +218,10 @@ def _build_teacher_client(provider: str) -> LLMClient:
         local_model=base.local_model,
         local_analyst_model=base.local_analyst_model,
         temperature=base.temperature,
+        # Pass through HF device/dtype so --teacher-provider hf respects
+        # HF_DEVICE / HF_DTYPE env vars (default "auto" each).
+        hf_device=os.getenv("HF_DEVICE", "auto") or "auto",
+        hf_dtype=os.getenv("HF_DTYPE", "auto") or "auto",
     )
     return build_client(teacher_cfg)
 

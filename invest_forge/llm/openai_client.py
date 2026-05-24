@@ -2,11 +2,38 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from invest_forge.common.logging_setup import get_logger
 from invest_forge.llm.client import ChatMessage, ChatResponse
 
 logger = get_logger(__name__)
+
+
+def _to_openai_messages(messages: list[ChatMessage]) -> list[dict[str, Any]]:
+    """Convert ChatMessage list to the OpenAI API message format.
+
+    - Message with EMPTY images → ``{"role": ..., "content": <str>}`` —
+      byte-identical to the format used before vision support was added.
+    - Message with non-empty images → OpenAI vision multipart format:
+      ``{"role": ..., "content": [{"type": "text", ...}, {"type": "image_url", ...}, ...]}``.
+
+    This function is pure (no side effects) and is the single place where
+    the wire format is determined.  When no message carries any image the
+    output is byte-identical to ``[{"role": m.role, "content": m.content} for m in messages]``.
+    """
+    result: list[dict[str, Any]] = []
+    for m in messages:
+        if not m.images:
+            # Text-only path — unchanged from pre-vision behaviour.
+            result.append({"role": m.role, "content": m.content})
+        else:
+            # Vision path — build a multipart content list.
+            parts: list[dict[str, Any]] = [{"type": "text", "text": m.content}]
+            for data_url in m.images:
+                parts.append({"type": "image_url", "image_url": {"url": data_url}})
+            result.append({"role": m.role, "content": parts})
+    return result
 
 
 @dataclass
@@ -34,7 +61,7 @@ class OpenAILLMClient:
     ) -> ChatResponse:
         kwargs: dict = {
             "model": self.model,
-            "messages": [{"role": m.role, "content": m.content} for m in messages],
+            "messages": _to_openai_messages(messages),
             "temperature": temperature if temperature is not None else self.temperature,
         }
         if max_tokens is not None:

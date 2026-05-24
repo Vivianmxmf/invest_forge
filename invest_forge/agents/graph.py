@@ -15,6 +15,7 @@ from invest_forge.agents.nodes import (
     make_output_node,
     make_researcher_node,
     make_risk_control_node,
+    make_vision_node,
     should_revise,
 )
 from invest_forge.agents.state import InvestState, empty_state
@@ -32,6 +33,11 @@ class GraphDeps:
     LOCAL_ANALYST_MODEL is configured) the analyst node uses this client so it
     targets the LoRA adapter while researcher + risk-control keep the base
     model client.  Defaults to ``None``, in which case all nodes share ``llm``.
+
+    ``vision_client`` is optional.  When set (provider=local AND
+    LOCAL_VISION_MODEL is configured) the vision node runs before the
+    researcher to analyse uploaded report/chart images.  When ``None``,
+    the vision node is a no-op and the graph topology is unchanged.
     """
 
     llm: LLMClient
@@ -39,6 +45,7 @@ class GraphDeps:
     sentiment: Sentiment
     retriever: HybridRetriever | None = None
     analyst_client: LLMClient | None = None
+    vision_client: LLMClient | None = None
     max_iterations: int = 2
 
 
@@ -65,8 +72,20 @@ def build_invest_graph(deps: GraphDeps):  # pragma: no cover - exercised by inte
     graph.add_node("risk_control", risk_control)
     graph.add_node("output", output)
 
-    graph.set_entry_point("data_fetcher")
-    graph.add_edge("data_fetcher", "researcher")
+    if deps.vision_client is not None:
+        # Insert a vision node between data_fetcher and researcher ONLY when
+        # vision is configured.  This keeps the graph topology identical to
+        # the non-vision path (data_fetcher → researcher edge) when
+        # vision_client is None, so existing graph tests pass unchanged.
+        vision = make_vision_node(deps.vision_client)
+        graph.add_node("vision", vision)
+        graph.set_entry_point("data_fetcher")
+        graph.add_edge("data_fetcher", "vision")
+        graph.add_edge("vision", "researcher")
+    else:
+        graph.set_entry_point("data_fetcher")
+        graph.add_edge("data_fetcher", "researcher")
+
     graph.add_edge("researcher", "analyst")
     graph.add_edge("analyst", "risk_control")
     graph.add_conditional_edges(
@@ -81,16 +100,27 @@ def build_invest_graph(deps: GraphDeps):  # pragma: no cover - exercised by inte
 
 # ───────────────────── In-process runner ─────────────────────
 
-def run_pipeline_inline(deps: GraphDeps, *, ts_code: str) -> InvestState:
+def run_pipeline_inline(
+    deps: GraphDeps,
+    *,
+    ts_code: str,
+    input_images: list[str] | None = None,
+) -> InvestState:
     """Execute the same DAG without LangGraph (for tests + simple scripts).
 
     Same edges, same conditional revision loop, no asyncio.
+
+    ``input_images`` — optional list of validated data-URL strings from the
+    API layer.  When provided (and ``deps.vision_client`` is set), the
+    vision node runs before the researcher; otherwise both are no-ops and
+    the pipeline behaves exactly as before.
     """
     # Use the dedicated analyst client when one is configured, otherwise fall
     # back to the shared llm so existing behaviour is unchanged.
     _analyst_llm = deps.analyst_client if deps.analyst_client is not None else deps.llm
 
     data_fetcher = make_data_fetcher_node(deps.data_provider, deps.sentiment, deps.retriever)
+    vision = make_vision_node(deps.vision_client)
     researcher = make_researcher_node(deps.llm)
     analyst = make_analyst_node(_analyst_llm)
     risk_control = make_risk_control_node(deps.llm)
@@ -98,8 +128,12 @@ def run_pipeline_inline(deps: GraphDeps, *, ts_code: str) -> InvestState:
 
     state: InvestState = empty_state()
     state["ts_code"] = ts_code
+    if input_images:
+        state["input_images"] = list(input_images)
 
     state = _merge(state, data_fetcher(state))
+    # vision is a no-op when vision_client is None or no images present.
+    state = _merge(state, vision(state))
     state = _merge(state, researcher(state))
 
     while True:

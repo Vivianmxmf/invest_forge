@@ -15,6 +15,7 @@ from invest_forge.agents.prompts import (
     OUTPUT_PROMPT,
     RESEARCHER_PROMPT,
     RISK_CONTROL_PROMPT,
+    VISION_PROMPT,
 )
 from invest_forge.agents.state import InvestState
 from invest_forge.common.logging_setup import get_logger
@@ -139,15 +140,51 @@ def make_data_fetcher_node(
     return node
 
 
+def make_vision_node(client: LLMClient | None) -> Callable[[InvestState], dict]:
+    """Return a node that calls the VLM to analyse uploaded report/chart images.
+
+    The node is INERT (returns ``{}``) in two cases:
+      * ``client`` is ``None`` — vision VLM not configured (no-op, default).
+      * ``state["input_images"]`` is empty — no images in this request.
+
+    When both conditions are met the node calls ``client.complete`` with a
+    ``ChatMessage`` whose ``images`` tuple carries the validated data-URLs,
+    and writes the response text to ``vision_analysis``.
+    """
+
+    def node(state: InvestState) -> dict:
+        if client is None:
+            return {}
+        images: list[str] = state.get("input_images") or []
+        if not images:
+            return {}
+        msg = ChatMessage(
+            role="user",
+            content=VISION_PROMPT,
+            images=tuple(images),
+        )
+        resp = client.complete([msg])
+        return {"vision_analysis": resp.text}
+
+    return node
+
+
 def make_researcher_node(client: LLMClient) -> Callable[[InvestState], dict]:
     def node(state: InvestState) -> dict:
         items = [_news_from_dict(n) for n in state.get("news_items", [])]
-        prompt = RESEARCHER_PROMPT.format(
+        base_prompt = RESEARCHER_PROMPT.format(
             fundamentals=json.dumps(state.get("fundamental_data", {}), ensure_ascii=False, indent=2),
             macro=json.dumps(state.get("macro_context", {}), ensure_ascii=False, indent=2),
             news_summary=_summarise_news(items),
             rag_evidence=_summarise_rag([_rag_from_dict(r) for r in state.get("rag_evidence", [])]),
         )
+        vision_analysis: str = state.get("vision_analysis") or ""
+        if vision_analysis:
+            # Append vision evidence ONLY when the vision node ran — keeping the
+            # no-image path byte-identical to the original RESEARCHER_PROMPT.format(...)
+            prompt = base_prompt + f"\n\n# 图像分析证据\n{vision_analysis}"
+        else:
+            prompt = base_prompt
         resp = client.complete([ChatMessage(role="user", content=prompt)])
         return {"research_memo": resp.text}
 

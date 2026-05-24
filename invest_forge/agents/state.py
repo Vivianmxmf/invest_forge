@@ -32,6 +32,12 @@ class InvestState(TypedDict, total=False):
     # RAG layer
     rag_evidence: list[dict[str, Any]]
 
+    # Multimodal vision input (validated data-URL strings from the API layer).
+    # Empty list == no images supplied → vision node is a no-op.
+    input_images: list[str]
+    # Output of the vision node.  Empty string == vision node did not run.
+    vision_analysis: str
+
     # Agent outputs
     research_memo: str
     analyst_report: dict[str, Any]
@@ -51,6 +57,8 @@ def empty_state() -> InvestState:
         macro_context={},
         news_items=[],
         rag_evidence=[],
+        input_images=[],
+        vision_analysis="",
         research_memo="",
         analyst_report={},
         risk_assessment={},

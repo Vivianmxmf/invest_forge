@@ -229,6 +229,16 @@ def main(argv: list[str] | None = None) -> None:
     # -----------------------------------------------------------------------
     # GPU path — heavy imports
     # -----------------------------------------------------------------------
+    # Restrict CUDA visibility to a SINGLE GPU *before* importing torch /
+    # initialising CUDA. Otherwise the HF Trainer sees n_gpu>1 and wraps the
+    # 4-bit model in nn.DataParallel, which scatters bitsandbytes quant tensors
+    # across devices and crashes ("Input tensors need to be on the same GPU").
+    # setdefault honours a user-provided CUDA_VISIBLE_DEVICES (e.g. to pick a
+    # free card); otherwise it falls back to --device.
+    import os
+
+    os.environ.setdefault("CUDA_VISIBLE_DEVICES", str(args.device))
+
     import torch  # type: ignore[import-untyped]
     from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training  # type: ignore[import-untyped]
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig  # type: ignore[import-untyped]
@@ -255,10 +265,14 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     # --- base model ---
-    # Pin the whole model to one GPU (single-GPU QLoRA; do NOT use
-    # ``accelerate launch --num_processes N`` with a fixed device_map).
-    device_map = {"": args.device}
-    logger.info("Pinning model to cuda:%d", args.device)
+    # Single-GPU QLoRA. CUDA_VISIBLE_DEVICES (set above) restricts which physical
+    # card is used; within the process it is always logical cuda:0. Do NOT launch
+    # under ``accelerate launch --num_processes N`` with this fixed device_map.
+    device_map = {"": 0}
+    logger.info(
+        "CUDA_VISIBLE_DEVICES=%s → model pinned to the single visible GPU (logical cuda:0)",
+        os.environ.get("CUDA_VISIBLE_DEVICES"),
+    )
     model = AutoModelForCausalLM.from_pretrained(
         cfg["base_model"],
         quantization_config=bnb_config,

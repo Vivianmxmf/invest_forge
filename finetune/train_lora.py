@@ -329,7 +329,11 @@ def main(argv: list[str] | None = None) -> None:
         logging_steps=cfg.get("logging_steps", 10),
         save_steps=cfg.get("save_steps", 50),
         eval_steps=cfg.get("eval_steps", 50),
-        evaluation_strategy=cfg.get("eval_strategy", "steps"),
+        # transformers >=4.46 renamed evaluation_strategy -> eval_strategy.
+        # Epoch-based eval+save keeps load_best_model_at_end valid even on tiny
+        # datasets (step-based saves never trigger when total steps < save_steps).
+        eval_strategy=cfg.get("eval_strategy", "epoch"),
+        save_strategy=cfg.get("save_strategy", "epoch"),
         save_total_limit=cfg.get("save_total_limit", 2),
         load_best_model_at_end=cfg.get("load_best_model_at_end", True),
         metric_for_best_model=cfg.get("metric_for_best_model", "eval_loss"),
@@ -337,7 +341,8 @@ def main(argv: list[str] | None = None) -> None:
         seed=seed,
         dataloader_num_workers=cfg.get("dataloader_num_workers", 2),
         remove_unused_columns=cfg.get("remove_unused_columns", False),
-        max_seq_length=cfg.get("max_seq_len", 2048),
+        # TRL >=0.18 renamed max_seq_length -> max_length on SFTConfig.
+        max_length=cfg.get("max_seq_len", 2048),
         dataset_text_field="text",
         # Packing MUST stay off — it concatenates examples and is incompatible
         # with completion-only loss masking.
@@ -352,7 +357,9 @@ def main(argv: list[str] | None = None) -> None:
         args=sft_cfg,
         train_dataset=train_ds,
         eval_dataset=val_ds,
-        tokenizer=tokenizer,
+        # transformers >=4.46 / TRL >=0.18 renamed the trainer's tokenizer arg
+        # to processing_class. (The collator above still takes tokenizer=.)
+        processing_class=tokenizer,
         data_collator=collator,
     )
 

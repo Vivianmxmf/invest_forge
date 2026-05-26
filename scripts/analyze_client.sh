@@ -25,7 +25,8 @@ export LLM_PROVIDER=local
 export LOCAL_LLM_BASE_URL="http://localhost:${VLLM_PORT}/v1"
 export LOCAL_LLM_MODEL="Qwen/Qwen2.5-7B-Instruct"
 export LOCAL_ANALYST_MODEL="investforge-analyst"
-unset TUSHARE_TOKEN   # use synthetic sample data; set it (mind the 1/hr cap) for real data
+unset TUSHARE_TOKEN                              # use synthetic sample data (mind Tushare's 1/hr cap)
+unset LOCAL_VISION_MODEL LOCAL_VISION_BASE_URL   # text-only smoke; no vision VLM needed
 
 # Confirm the vLLM server is reachable before booting the API.
 if ! curl -fsS "http://localhost:${VLLM_PORT}/v1/models" >/dev/null 2>&1; then

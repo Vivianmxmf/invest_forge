@@ -1,6 +1,6 @@
 # InvestForge — AI 主观投研助手
 
-> LangGraph Multi-Agent · Hybrid RAG · LoRA-ready · LangSmith observable
+> LangGraph Multi-Agent · Hybrid RAG · QLoRA-distilled analyst (vLLM-served) · Multimodal vision · LangSmith observable
 
 InvestForge is the capstone project of the *AI 主观投研* sprint
 ([`../JD6_AI主观投研实习生_AI_Agent方向.md`](../JD6_AI主观投研实习生_AI_Agent方向.md)).
@@ -56,15 +56,19 @@ invest_forge/
 │   ├── common/                    # config · logging · types
 │   ├── eval/                      # ragas_eval · quality
 │   ├── knowledge_base/            # builder · retriever · pdf_loader
-│   ├── llm/                       # client protocol · fake · openai · anthropic
-│   └── tools/                     # data · sentiment · rag · backtest
-├── frontend/                      # Streamlit dashboard
+│   ├── llm/                       # client protocol · fake · openai · anthropic · hf (in-process)
+│   └── tools/                     # data · sentiment · rag · backtest · image_input (vision security)
+├── finetune/                      # QLoRA: sft_format · train_lora · eval_lora
+├── frontend/                      # Streamlit dashboard (with image upload)
 ├── api/                           # (inside invest_forge/api/) FastAPI
 ├── notebooks/                     # Week 1 / 3 / 4 walkthroughs
-├── scripts/                       # generate_sample_data · build_kb · setup · server_migrate
+├── configs/lora.yaml              # QLoRA hyperparameters
+├── scripts/                       # generate_sample_data · build_kb · build_sft_dataset · serve_vllm.sbatch · analyze_client.sh
+├── docs/                          # W2_LORA_RUNBOOK · VISION_RUNBOOK
 ├── data/sample/                   # synthetic 5-stock dataset (141 KB) — committed
-├── tests/                         # 64 unit tests, network-free
-├── docker-compose.yml             # qdrant + (optional) vllm
+├── tests/                         # 197 unit tests, network-free
+├── docker-compose.yml             # qdrant + vllm + vllm-vision (for Docker hosts)
+├── requirements-gpu.txt           # cu121 GPU stack (driver 535 / CUDA 12.2)
 ├── pyproject.toml · requirements.txt · Makefile
 └── README.md
 ```
@@ -102,9 +106,6 @@ pip install -r requirements-gpu.txt \
 
 make api          # FastAPI on :8001
 make dashboard    # Streamlit on :8501
-
-# Optional vLLM (self-hosted Qwen2.5-7B + investforge-analyst LoRA adapter):
-docker compose --profile vllm up -d
 ```
 
 > **No model weights are downloaded by ``server_migrate.sh``.**
@@ -113,9 +114,31 @@ docker compose --profile vllm up -d
 > huggingface-cli login
 > huggingface-cli download Qwen/Qwen2.5-7B-Instruct
 > ```
->
+
+### Self-hosted vLLM serving (Qwen2.5-7B + `investforge-analyst` LoRA)
+
+On a **Docker host**: `docker compose --profile vllm up -d`.
+
+On the **athena SLURM cluster** (no Docker / no sudo), serve via the bundled
+job script — run vLLM in its **own conda env** (it pins its own torch /
+transformers, so it must not share the `invest_forge` training env):
+
+```bash
+# one-time: a dedicated serving env (vllm 0.6.3.post1 is cu121 / driver-535 safe)
+conda create -n vllm python=3.11 -y && conda activate vllm
+pip install "vllm==0.6.3.post1" "transformers==4.46.3"
+
+# submit the server (handles chat-template + lm-format-enforcer backend):
+sbatch scripts/serve_vllm.sbatch                 # tail -f vllm_<jobid>.log
+# run the full agent on the SAME node (LoRA analyst + base researcher/risk):
+srun --jobid=<jobid> --overlap --pty bash
+bash scripts/analyze_client.sh 688981.SH
+```
+
 > See [`docs/W2_LORA_RUNBOOK.md`](docs/W2_LORA_RUNBOOK.md) for the full
-> LoRA fine-tuning + adapter serving workflow.
+> fine-tuning workflow and [`scripts/serve_vllm.sbatch`](scripts/serve_vllm.sbatch)
+> for the SLURM serving recipe (validated end-to-end on node4: `/analyze`
+> returns a full recommendation with the analyst node served by the adapter).
 
 ---
 
@@ -169,17 +192,20 @@ boot commands, and security model.
 
 ## Tests
 
-64 pytest unit tests cover:
+197 pytest unit tests, fully network-free, cover:
 
 * domain enums + lenient rating parsing
 * config loader edge cases (missing env, bad int)
 * lexicon sentiment scorer
-* fake LLM dispatch + handler-priority ordering
+* fake LLM dispatch + handler-priority ordering · in-process HF provider wiring
 * hybrid retriever (BM25, HyDE, reranker), recursive chunking
-* every agent node (researcher / analyst / risk-control / output)
+* every agent node (researcher / analyst / risk-control / vision / output)
 * end-to-end pipeline including conditional revision loop + iteration cap
 * lookahead-bias-safe signal + simple / cross-sectional backtest
 * heuristic quality scorer + RAGAS stub
+* SFT dataset distillation + train/serve prompt parity
+* SSRF-hardened image-input validator (IP pinning, path traversal, bombs)
+* multimodal vision wiring (ChatMessage images, vision node gating)
 
 ```bash
 pytest -q
@@ -192,7 +218,7 @@ pytest -q
 | Week | Deliverable                                                          | Status |
 |------|----------------------------------------------------------------------|--------|
 | W1   | Fundamental analysis report on a single A-share name                 | ⏳ on user |
-| W2   | LoRA distill of Qwen2.5-7B analyst + vLLM adapter serving + routing | ✅ see [docs/W2_LORA_RUNBOOK.md](docs/W2_LORA_RUNBOOK.md) |
+| W2   | LoRA distill of Qwen2.5-7B analyst + vLLM adapter serving + routing | ✅ **shipped live** (trained → eval → vLLM-served → `/analyze` end-to-end on SLURM); see [docs/W2_LORA_RUNBOOK.md](docs/W2_LORA_RUNBOOK.md) |
 | W3   | Hybrid RAG + RAGAS Faithfulness ≥ 0.8                                | ✅ stub eval ready |
 | W4   | 5-ticker end-to-end + alphalens backtest dashboard                   | ✅ skeleton ready |
 

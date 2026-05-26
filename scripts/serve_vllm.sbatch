@@ -35,6 +35,7 @@ PORT="${PORT:-8000}"
 MAX_LORA_RANK="${MAX_LORA_RANK:-16}"
 GPU_UTIL="${GPU_UTIL:-0.85}"
 MAX_LEN="${MAX_LEN:-4096}"
+CHAT_TEMPLATE="${CHAT_TEMPLATE:-$HOME/invest_forge/qwen2.5_chat_template.jinja}"
 
 echo "================ InvestForge vLLM server ================"
 echo "node     : $(hostname)"
@@ -57,12 +58,34 @@ if [[ ! -f "$ADAPTER_PATH/adapter_config.json" ]]; then
   exit 1
 fi
 
+# ---- chat template ------------------------------------------------------
+# transformers 4.57 (training env) may save the adapter tokenizer's chat
+# template in a separate chat_template.jinja that transformers <4.49 (this
+# serving env) does not auto-load → vLLM raises "default chat template is no
+# longer allowed". Pass the BASE model's template explicitly (also keeps
+# train/serve parity). Extract it once if missing.
+if [[ ! -f "$CHAT_TEMPLATE" ]]; then
+  echo "extracting chat template from $MODEL → $CHAT_TEMPLATE ..."
+  python - "$MODEL" "$CHAT_TEMPLATE" <<'PY'
+import sys
+from transformers import AutoTokenizer
+model, out = sys.argv[1], sys.argv[2]
+tmpl = AutoTokenizer.from_pretrained(model).chat_template
+if not tmpl:
+    raise SystemExit("ERROR: base tokenizer has no chat_template")
+with open(out, "w") as f:
+    f.write(tmpl)
+print(f"wrote {out} ({len(tmpl)} chars)")
+PY
+fi
+
 # ---- launch vLLM in the background --------------------------------------
 # SLURM already exposes only the allocated GPU(s) via CUDA_VISIBLE_DEVICES.
 vllm serve "$MODEL" \
   --enable-lora \
   --lora-modules "${ADAPTER_NAME}=${ADAPTER_PATH}" \
   --max-lora-rank "$MAX_LORA_RANK" \
+  --chat-template "$CHAT_TEMPLATE" \
   --port "$PORT" \
   --gpu-memory-utilization "$GPU_UTIL" \
   --max-model-len "$MAX_LEN" &

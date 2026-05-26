@@ -36,6 +36,10 @@ MAX_LORA_RANK="${MAX_LORA_RANK:-16}"
 GPU_UTIL="${GPU_UTIL:-0.85}"
 MAX_LEN="${MAX_LEN:-4096}"
 CHAT_TEMPLATE="${CHAT_TEMPLATE:-$HOME/invest_forge/qwen2.5_chat_template.jinja}"
+# JSON/guided-decoding backend. Default "outlines" pulls a broken pyairports
+# dependency in this env; lm-format-enforcer is already installed and needs no
+# outlines. The analyst/risk nodes use response_format=json, so this matters.
+GUIDED_BACKEND="${GUIDED_BACKEND:-lm-format-enforcer}"
 
 echo "================ InvestForge vLLM server ================"
 echo "node     : $(hostname)"
@@ -86,6 +90,7 @@ vllm serve "$MODEL" \
   --lora-modules "${ADAPTER_NAME}=${ADAPTER_PATH}" \
   --max-lora-rank "$MAX_LORA_RANK" \
   --chat-template "$CHAT_TEMPLATE" \
+  --guided-decoding-backend "$GUIDED_BACKEND" \
   --port "$PORT" \
   --gpu-memory-utilization "$GPU_UTIL" \
   --max-model-len "$MAX_LEN" &

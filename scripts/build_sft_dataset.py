@@ -4,13 +4,16 @@ Distillation flow per ticker:
   1. Build ``GraphDeps`` (FakeDataProvider when provider=fake or no Tushare
      token is available; otherwise the composite Tushare+AKShare provider).
   2. Run ``make_data_fetcher_node`` + ``make_researcher_node`` to produce a
-     real ``research_memo`` via the pipeline's normal machinery.
+     real ``research_memo`` via the pipeline's normal machinery (built ONCE
+     per ticker; never re-sampled during temperature augmentation).
   3. Feed the memo to the TEACHER ``LLMClient`` via ``build_analyst_user_prompt``
-     (byte-identical to what ``make_analyst_node`` sends at inference time).
-  4. Parse and normalise the teacher's JSON response.
-  5. Optionally emit a second example with a synthetic ``risk_feedback`` line
-     to teach the revision path.
-  6. Shuffle with the given seed and split into train / val JSONL files.
+     (byte-identical to what ``make_analyst_node`` sends at inference time),
+     sampling N times across a temperature ladder to get diverse examples.
+  4. Parse and normalise each teacher JSON response; skip failures.
+  5. Deduplicate byte-identical assistant outputs (deterministic teachers
+     collapse to 1 unique example; real teachers at temp>0 produce variety).
+  6. Optionally emit revision examples with synthetic ``risk_feedback`` lines.
+  7. Shuffle with the given seed and split into train / val JSONL files.
 
 Offline / dry-run usage (no API keys required):
 
@@ -18,13 +21,16 @@ Offline / dry-run usage (no API keys required):
         --teacher-provider fake \\
         --out-dir /tmp/sft_smoke
 
-With real keys (on server):
+With real keys (on server) — scale to ~100-200 examples:
 
     TUSHARE_TOKEN=<tok> LLM_PROVIDER=openai OPENAI_API_KEY=<key> \\
         python scripts/build_sft_dataset.py \\
-        --tickers 688981.SH,600519.SH,300750.SZ \\
+        --tickers 688981.SH,600519.SH,300750.SZ,600276.SH,601398.SH \\
         --out-dir data/sft \\
-        --with-revisions
+        --with-revisions \\
+        --samples-per-ticker 20 \\
+        --min-temp 0.3 \\
+        --max-temp 0.9
 """
 from __future__ import annotations
 
@@ -140,6 +146,93 @@ def _parse_teacher_json(text: str) -> dict[str, Any] | None:
 
 
 # ---------------------------------------------------------------------------
+# Temperature ladder + dedup helpers (pure Python, no numpy)
+# ---------------------------------------------------------------------------
+
+
+def _temperature_ladder(
+    n: int,
+    min_temp: float = 0.3,
+    max_temp: float = 0.9,
+) -> list[float | None]:
+    """Return a list of N temperatures evenly spanning [min_temp, max_temp].
+
+    Special case: N == 1 returns ``[None]`` so the teacher uses its default
+    temperature — preserving exact backward-compatible behaviour for the
+    single-sample path.
+
+    The supported temperature range is ``[0.0, 2.0]`` (2.0 is OpenAI's
+    documented ceiling; HuggingFace accepts it too).
+
+    Args:
+        n: Number of samples (>= 1).
+        min_temp: Lower bound of the ladder (inclusive). Must be in [0.0, 2.0].
+        max_temp: Upper bound of the ladder (inclusive). Must satisfy
+            ``min_temp <= max_temp <= 2.0``.
+
+    Returns:
+        A list of length N: ``[None]`` when N==1, else N floats in
+        ``[min_temp, max_temp]``.
+
+    Raises:
+        ValueError: If n < 1 or not ``0.0 <= min_temp <= max_temp <= 2.0``.
+    """
+    if n < 1:
+        raise ValueError(f"samples_per_ticker must be >= 1; got {n}")
+    if not (0.0 <= min_temp <= max_temp <= 2.0):
+        raise ValueError(
+            "Require 0.0 <= min_temp <= max_temp <= 2.0; "
+            f"got min_temp={min_temp}, max_temp={max_temp}"
+        )
+    if n == 1:
+        return [None]
+    span = max_temp - min_temp
+    return [min_temp + span * i / (n - 1) for i in range(n)]
+
+
+def _dedup_examples(examples: list[SFTExample]) -> list[SFTExample]:
+    """Collapse byte-identical examples by FULL identity, preserving order.
+
+    Two examples are duplicates iff BOTH their serialised user message content
+    AND their assistant message content are byte-identical — i.e. the dedup key
+    is the tuple ``(user_content, assistant_content)``.  The first occurrence is
+    kept; subsequent duplicates are dropped.
+
+    Keying on the full (user, assistant) pair — not assistant content alone — is
+    essential for backward compatibility: a baseline example and a revision
+    example share the same memo but differ in their USER prompt (the revision
+    carries the synthetic risk_feedback line).  Even if a deterministic teacher
+    returns identical analyst JSON for both, they are legitimately distinct
+    training prompts and must NOT collapse into one.
+
+    This keeps fake-teacher mode honest (N identical baseline samples → 1) while
+    a real teacher at temp > 0 yields genuine variety, and never erases the
+    baseline-vs-revision distinction.
+
+    Args:
+        examples: Ordered list of ``SFTExample`` instances (may contain dupes).
+
+    Returns:
+        A new list with duplicates removed, preserving original order.
+    """
+    seen: set[tuple[str, str]] = set()
+    unique: list[SFTExample] = []
+    for ex in examples:
+        # Dedup key is the full (user, assistant) identity.
+        user_content = next(
+            m["content"] for m in ex.messages if m["role"] == "user"
+        )
+        assistant_content = next(
+            m["content"] for m in ex.messages if m["role"] == "assistant"
+        )
+        key = (user_content, assistant_content)
+        if key not in seen:
+            seen.add(key)
+            unique.append(ex)
+    return unique
+
+
+# ---------------------------------------------------------------------------
 # Teacher resolution
 # ---------------------------------------------------------------------------
 
@@ -237,11 +330,29 @@ def _run_pipeline_for_ticker(
     teacher: LLMClient,
     *,
     with_revisions: bool,
+    samples_per_ticker: int = 1,
+    min_temp: float = 0.3,
+    max_temp: float = 0.9,
 ) -> list[SFTExample]:
     """Run data-fetcher + researcher nodes, then query the teacher.
 
-    Returns a list of ``SFTExample`` instances (1 or 2 per ticker depending
-    on ``with_revisions``).  Returns an empty list on unrecoverable failure.
+    The research_memo is built ONCE per ticker.  The teacher is then sampled
+    ``samples_per_ticker`` times across a temperature ladder for both the
+    baseline prompt and (when ``with_revisions`` is True) the revision prompt.
+    Byte-identical assistant outputs are deduplicated before returning.
+
+    Args:
+        ts_code: Ticker code to process.
+        data_provider: Market-data backend (real or fake).
+        teacher: Teacher LLM client.
+        with_revisions: If True, also generate revision-path examples.
+        samples_per_ticker: Number of teacher samples per prompt variant.
+        min_temp: Lower bound of the temperature ladder (when N > 1).
+        max_temp: Upper bound of the temperature ladder (when N > 1).
+
+    Returns:
+        Deduplicated list of ``SFTExample`` instances (may be empty on
+        unrecoverable failure).
     """
     sentiment = LexiconSentiment()
 
@@ -256,7 +367,7 @@ def _run_pipeline_for_ticker(
     for k, v in patch.items():
         state[k] = v  # type: ignore[literal-required]
 
-    # Step 2: researcher node → research_memo
+    # Step 2: researcher node → research_memo (built ONCE; not re-sampled)
     researcher = make_researcher_node(teacher)
     research_patch = researcher(state)
     research_memo: str = research_patch.get("research_memo", "")
@@ -264,42 +375,67 @@ def _run_pipeline_for_ticker(
         logger.warning("empty research_memo for %s", ts_code)
         return []
 
-    examples: list[SFTExample] = []
+    temps = _temperature_ladder(samples_per_ticker, min_temp, max_temp)
+    raw_examples: list[SFTExample] = []
 
-    # Step 3a: baseline analyst example (no prior risk feedback)
+    # Step 3a: baseline analyst examples — one per temperature step
     user_prompt = build_analyst_user_prompt(research_memo)
-    teacher_resp = teacher.complete(
-        [ChatMessage(role="user", content=user_prompt)],
-        response_format="json",
-    )
-    parsed = _parse_teacher_json(teacher_resp.text)
-    if parsed is None:
-        logger.warning("teacher returned non-JSON for %s (baseline); skipping", ts_code)
-    else:
+    for t in temps:
+        teacher_resp = teacher.complete(
+            [ChatMessage(role="user", content=user_prompt)],
+            temperature=t,
+            response_format="json",
+        )
+        parsed = _parse_teacher_json(teacher_resp.text)
+        if parsed is None:
+            logger.warning(
+                "teacher returned non-JSON for %s (baseline, temp=%s); skipping",
+                ts_code, t,
+            )
+            continue
         normalised = _normalise_analyst_json(parsed)
         if normalised is None:
-            logger.warning("teacher JSON invalid/incomplete for %s (baseline); skipping", ts_code)
-        else:
-            examples.append(to_chat_example(research_memo, normalised))
+            logger.warning(
+                "teacher JSON invalid/incomplete for %s (baseline, temp=%s); skipping",
+                ts_code, t,
+            )
+            continue
+        raw_examples.append(to_chat_example(research_memo, normalised))
 
-    # Step 3b: revision-path example
+    # Step 3b: revision-path examples — one per temperature step
     if with_revisions:
         feedback = _REVISION_FEEDBACK_TEMPLATE.format(ts_code=ts_code)
         user_prompt_rev = build_analyst_user_prompt(research_memo, risk_feedback=feedback)
-        rev_resp = teacher.complete(
-            [ChatMessage(role="user", content=user_prompt_rev)],
-            response_format="json",
-        )
-        parsed_rev = _parse_teacher_json(rev_resp.text)
-        if parsed_rev is None:
-            logger.warning("teacher returned non-JSON for %s (revision); skipping", ts_code)
-        else:
+        for t in temps:
+            rev_resp = teacher.complete(
+                [ChatMessage(role="user", content=user_prompt_rev)],
+                temperature=t,
+                response_format="json",
+            )
+            parsed_rev = _parse_teacher_json(rev_resp.text)
+            if parsed_rev is None:
+                logger.warning(
+                    "teacher returned non-JSON for %s (revision, temp=%s); skipping",
+                    ts_code, t,
+                )
+                continue
             normalised_rev = _normalise_analyst_json(parsed_rev)
             if normalised_rev is None:
-                logger.warning("teacher JSON invalid for %s (revision); skipping", ts_code)
-            else:
-                examples.append(to_chat_example(research_memo, normalised_rev, risk_feedback=feedback))
+                logger.warning(
+                    "teacher JSON invalid for %s (revision, temp=%s); skipping",
+                    ts_code, t,
+                )
+                continue
+            raw_examples.append(
+                to_chat_example(research_memo, normalised_rev, risk_feedback=feedback)
+            )
 
+    # Dedup: collapse byte-identical assistant content within this ticker's output
+    examples = _dedup_examples(raw_examples)
+    logger.info(
+        "  → ticker %s: %d sampled, %d unique kept",
+        ts_code, len(raw_examples), len(examples),
+    )
     return examples
 
 
@@ -316,6 +452,9 @@ def build_dataset(
     seed: int = 42,
     teacher_provider: str | None = None,
     with_revisions: bool = False,
+    samples_per_ticker: int = 1,
+    min_temp: float = 0.3,
+    max_temp: float = 0.9,
 ) -> tuple[int, int]:
     """Generate SFT examples and write train/val JSONL.
 
@@ -328,10 +467,24 @@ def build_dataset(
             ``None`` resolves via ``TEACHER_LLM_PROVIDER`` then the global
             ``LLM_PROVIDER`` (see ``_resolve_teacher_provider``).
         with_revisions: If True, also generate revision-path examples.
+        samples_per_ticker: Number of teacher samples per prompt variant.
+            Default 1 preserves backward-compatible single-sample behaviour.
+        min_temp: Lower bound of the temperature ladder (inclusive).
+            Only used when ``samples_per_ticker > 1``.
+        max_temp: Upper bound of the temperature ladder (inclusive).
+            Only used when ``samples_per_ticker > 1``.
 
     Returns:
         ``(n_train, n_val)`` counts.
     """
+    if samples_per_ticker < 1:
+        raise ValueError(f"samples_per_ticker must be >= 1; got {samples_per_ticker}")
+    if not (0.0 <= min_temp <= max_temp <= 2.0):
+        raise ValueError(
+            "Require 0.0 <= min_temp <= max_temp <= 2.0; "
+            f"got min_temp={min_temp}, max_temp={max_temp}"
+        )
+
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -362,9 +515,11 @@ def build_dataset(
             data_provider,
             teacher,
             with_revisions=with_revisions,
+            samples_per_ticker=samples_per_ticker,
+            min_temp=min_temp,
+            max_temp=max_temp,
         )
         all_examples.extend(exs)
-        logger.info("  → %d example(s) collected", len(exs))
 
     if not all_examples:
         logger.error("No valid examples generated; check teacher LLM output.")
@@ -437,6 +592,28 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Also emit a second example per ticker with synthetic risk feedback.",
     )
+    parser.add_argument(
+        "--samples-per-ticker",
+        type=int,
+        default=1,
+        help=(
+            "Number of teacher samples per prompt variant (baseline + optional revision). "
+            "N=1 uses the teacher default temperature (backward-compatible). "
+            "N>1 spaces temperatures evenly across [--min-temp, --max-temp]."
+        ),
+    )
+    parser.add_argument(
+        "--min-temp",
+        type=float,
+        default=0.3,
+        help="Lower bound of the temperature ladder (inclusive). Only used when --samples-per-ticker > 1.",
+    )
+    parser.add_argument(
+        "--max-temp",
+        type=float,
+        default=0.9,
+        help="Upper bound of the temperature ladder (inclusive). Only used when --samples-per-ticker > 1.",
+    )
     args = parser.parse_args(argv)
 
     tickers = _resolve_tickers(args.tickers)
@@ -449,6 +626,9 @@ def main(argv: list[str] | None = None) -> None:
         seed=args.seed,
         teacher_provider=args.teacher_provider,
         with_revisions=args.with_revisions,
+        samples_per_ticker=args.samples_per_ticker,
+        min_temp=args.min_temp,
+        max_temp=args.max_temp,
     )
 
     print("\n" + "=" * 60)

@@ -6,7 +6,8 @@ a compiled LangGraph and invoke it with a seed ticker.  Requires the
 
 Usage
 -----
-    python scripts/smoke_langgraph.py
+    python scripts/smoke_langgraph.py                 # default 688981.SH
+    python scripts/smoke_langgraph.py 600519.SH       # positional (matches analyze_client.sh)
     python scripts/smoke_langgraph.py --ts-code 600519.SH
 """
 from __future__ import annotations
@@ -32,31 +33,32 @@ def _build_argparser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Smoke-test the LangGraph runtime end-to-end (offline)."
     )
+    # Accept the ticker positionally (matches scripts/analyze_client.sh) OR via
+    # --ts-code; positional wins when both are given.
+    parser.add_argument(
+        "ts_code_pos",
+        nargs="?",
+        default=None,
+        metavar="TS_CODE",
+        help="Ticker to analyse, positional (default: 688981.SH).",
+    )
     parser.add_argument(
         "--ts-code",
-        default="688981.SH",
-        help="Ticker to analyse (default: 688981.SH).",
+        dest="ts_code_opt",
+        default=None,
+        help="Ticker to analyse (alternative to the positional form).",
     )
     return parser
 
 
 def main() -> None:
     args = _build_argparser().parse_args()
-    ts_code: str = args.ts_code
+    ts_code: str = args.ts_code_pos or args.ts_code_opt or "688981.SH"
 
-    # Guard: surface a clear message when langgraph is absent (local laptop).
-    try:
-        from invest_forge.agents.graph import build_invest_graph, _initial_state
-    except ImportError as exc:
-        print(
-            f"langgraph not installed — run on the server (ImportError: {exc})",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    # Import dependencies AFTER the langgraph guard so the error message is
-    # printed even if invest_forge itself is not on the path.
-    from invest_forge.agents.graph import GraphDeps
+    # These imports are langgraph-free (build_invest_graph imports langgraph
+    # lazily inside its own body, so importing it here does NOT require the
+    # package — the ImportError only fires when we CALL it below).
+    from invest_forge.agents.graph import GraphDeps, build_invest_graph, _initial_state
     from invest_forge.llm.fake import FakeLLMClient
     from invest_forge.tools.data_tools import FakeDataProvider
     from invest_forge.tools.sentiment import LexiconSentiment
@@ -69,7 +71,17 @@ def main() -> None:
     )
 
     logger.info("Compiling LangGraph for ticker %s …", ts_code)
-    compiled = build_invest_graph(deps)
+    # Guard the COMPILE call: build_invest_graph does `from langgraph.graph
+    # import ...` internally, so a missing langgraph surfaces here (local
+    # laptop), not at the import above.
+    try:
+        compiled = build_invest_graph(deps)
+    except ImportError as exc:
+        print(
+            f"langgraph not installed — run this on the server (ImportError: {exc})",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     logger.info("Invoking compiled graph …")
     state = compiled.invoke(_initial_state(ts_code, None))

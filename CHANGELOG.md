@@ -4,6 +4,58 @@ All version-level changes to InvestForge are documented here.
 
 ---
 
+## [0.3.1] - 2026-05-27
+
+### Features
+
+- **Temperature-ladder augmentation for the SFT distill set:**
+  `scripts/build_sft_dataset.py` gains `--samples-per-ticker N` plus
+  `--min-temp` / `--max-temp`, drawing N teacher samples per prompt across an
+  evenly-spaced temperature ladder (validated `0 ≤ min ≤ max ≤ 2.0`). `N=1`
+  is byte-identical to the prior single-sample behavior.
+
+- **Full-identity dedup:** Generated examples are deduplicated on the full
+  `(user, assistant)` identity rather than assistant content alone, so a
+  baseline example and its revision counterpart are never collapsed even when
+  the teacher returns identical analyst JSON for both.
+
+- **+13 tests (197 → 210):** temperature-ladder bounds, full-identity dedup,
+  prompt-parity recording, and invalid-argument validation.
+
+### Design Rationale
+
+- **Why scale up:** the original ~10-example POC gave a delta of 0 (a ceiling
+  artifact — only 2 val examples, no resolution). Augmenting to 200 examples
+  yields enough val samples (30) to measure a real signal.
+
+- **Memo built once per ticker:** only the analyst *sampling* temperature
+  varies between samples; the research memo and thus the user prompt stay
+  byte-identical, preserving train/serve prompt parity.
+
+- **Dedup on full identity:** keying on `(user, assistant)` ensures
+  baseline ≠ revision examples both survive even with a same-answer
+  (deterministic) teacher, since their user prompts differ.
+
+### Notes & Caveats
+
+- **Measured delta** (200-example set, 30-example val):
+  `rating_accuracy` 0.8667 → 0.9000 (+3.3pp), `confidence_mae`
+  0.0283 → 0.0200 (−0.0083); `json_validity_rate` and `risk_factor_coverage`
+  both sit at the 1.0 ceiling. The 20-sample run produced 200 examples
+  (170 train / 30 val), 40 unique per ticker, in ~23 min on a single A5000.
+
+- **Self-distillation bounds the gain:** the live run used
+  `teacher == student == Qwen2.5-7B`, so the improvement is format/schema
+  fidelity, not new alpha. Val labels are teacher-generated (fidelity to the
+  teacher, not ground truth); a stronger teacher (`gpt-4o` / `claude`) gives
+  real headroom on `rating_accuracy`.
+
+- **Fake teacher = zero diversity:** the fake/deterministic teacher produces
+  identical samples that all dedup to 1 — augmentation requires a real teacher
+  at `temp > 0`.
+
+---
+
 ## [0.3.0] - 2026-05-24
 
 ### Features

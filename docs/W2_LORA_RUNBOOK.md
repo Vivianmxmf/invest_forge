@@ -105,6 +105,35 @@ user turn is byte-identical to what the analyst node sends at inference.
 `data/sft/` is git-ignored — it is regenerable and may contain API-key-derived
 content.
 
+### Scaling the dataset (temperature augmentation)
+
+The base command above emits ~1 example per prompt variant per ticker, which is
+too small to resolve a measurable train/serve delta. To scale, draw multiple
+teacher samples per prompt across a temperature ladder:
+
+```bash
+TEACHER_LLM_PROVIDER=hf python scripts/build_sft_dataset.py \
+    --samples-per-ticker 20 --min-temp 0.3 --max-temp 1.0 \
+    --with-revisions --out-dir data/sft
+```
+
+- `--samples-per-ticker N` draws N teacher samples per prompt across an even
+  temperature ladder `[min, max]` (validated `0 ≤ min ≤ max ≤ 2.0`).
+- The research memo is built **once per ticker**, so only the analyst
+  *sampling* temperature varies — the user prompt stays byte-identical, keeping
+  train/serve parity intact.
+- Duplicates are collapsed on the full `(user, assistant)` identity, so a
+  baseline example and its revision counterpart never collide (their user
+  prompts differ).
+- `N=1` is byte-identical to the old single-sample behavior.
+- **IMPORTANT:** diversity requires a *real* teacher at `temp > 0`. The
+  fake/deterministic teacher yields identical samples that all dedup to 1 —
+  augmentation produces no variety in that mode.
+
+The 20-sample run above produced **200 examples (170 train / 30 val), 40 unique
+per ticker** (full temperature diversity, zero dedup collapse) in **~23 min**
+(~205 serial in-process HF generations on a single A5000).
+
 ---
 
 ## Step 4 — Fine-tune the analyst LoRA
@@ -133,9 +162,27 @@ Training writes the adapter to `models/adapters/investforge-analyst/`
 python finetune/eval_lora.py --config configs/lora.yaml
 ```
 
-Reports ROUGE / BERTScore against the eval split and a heuristic quality
-score consistent with the online eval pipeline.  Target: analyst quality
-score ≥ 0.7 on the eval set before promoting to production.
+`eval_lora.py` reports four task metrics on the eval split — `json_validity_rate`,
+`rating_accuracy` (vs the teacher's rating), `confidence_mae`, and
+`risk_factor_coverage` — and compares the **base** model against the **adapter**,
+printing the delta for each. Use `--base-only` to evaluate just the base model
+(eval is deterministic, so a `--base-only` re-run prints identical base numbers),
+and `--out-json eval.json` to write the metrics to disk.
+
+Measured on the 200-example temperature-augmented distill set (30-example val):
+
+| metric                | base   | adapter | delta                  |
+|-----------------------|--------|---------|------------------------|
+| rating_accuracy       | 0.8667 | 0.9000  | +0.0333                |
+| confidence_mae        | 0.0283 | 0.0200  | −0.0083 (lower=better) |
+| json_validity_rate    | 1.0000 | 1.0000  | ceiling                |
+| risk_factor_coverage  | 1.0000 | 1.0000  | ceiling                |
+
+**Caveat — self-distillation.** This run used `teacher == student == Qwen2.5-7B`,
+so the gains are format/schema-fidelity improvements and are bounded; the val
+labels are teacher-generated (this measures fidelity-to-teacher, not ground-truth
+alpha). A stronger teacher (`gpt-4o` / `claude`) gives real headroom on
+`rating_accuracy`.
 
 ---
 

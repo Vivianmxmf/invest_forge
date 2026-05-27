@@ -239,7 +239,7 @@ pytest -q
 |------|----------------------------------------------------------------------|--------|
 | W1   | Fundamental analysis report on a single A-share name                 | ⏳ on user |
 | W2   | LoRA distill of Qwen2.5-7B analyst + vLLM adapter serving + routing | ✅ **shipped live** (trained → eval → vLLM-served → `/analyze` end-to-end on SLURM) → measured non-ceiling delta on a 200-example temperature-augmented distill set: rating-accuracy 0.867→0.900, confidence-MAE 0.0283→0.0200 (30-ex val); see [docs/W2_LORA_RUNBOOK.md](docs/W2_LORA_RUNBOOK.md) |
-| W3   | Hybrid RAG + RAGAS Faithfulness ≥ 0.8                                | ✅ real RAGAS runner + judge wiring + committed eval set (`data/sample/ragas_eval_set.jsonl`, 6 rows) ready; measured Faithfulness number pending server run |
+| W3   | Hybrid RAG + RAGAS Faithfulness ≥ 0.8                                | ✅ **measured** on node4 (Qwen2.5-7B judge, 6-row eval set): **Faithfulness 1.00, context_precision 1.00, context_recall 1.00** → gate PASS; real RAGAS runner + judge wiring committed |
 | W4   | 5-ticker end-to-end + alphalens backtest dashboard                   | ✅ skeleton ready |
 
 ---

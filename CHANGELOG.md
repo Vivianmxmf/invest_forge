@@ -4,6 +4,42 @@ All version-level changes to InvestForge are documented here.
 
 ---
 
+## [0.4.0] - 2026-05-27
+
+### Features
+
+- **LangGraph runtime runs live + API routes through it:** `build_invest_graph`
+  is now executable via `run_pipeline_graph`; the FastAPI `/analyze` compiles
+  and invokes the real compiled graph when `USE_LANGGRAPH=true` (default false
+  keeps the in-process inline runner). Enables LangSmith auto-tracing of the
+  agent graph (`LANGCHAIN_TRACING_V2`). `scripts/smoke_langgraph.py` proves the
+  runtime end-to-end offline.
+- **Real RAGAS evaluation (W3):** `evaluate_ragas` gains judge LLM/embeddings
+  wiring (`build_ragas_judge`, OpenAI or local vLLM via base_url) and metric
+  selection (default = the 3 LLM-only metrics; `answer_relevancy` opt-in).
+  `scripts/run_ragas_eval.py` loads a committed 6-row eval set and gates on
+  Faithfulness ≥ 0.8.
+
+### Design Rationale
+
+- LangGraph runtime is opt-in so the proven offline inline path (and all tests)
+  stay byte-identical; the graph path is what makes LangSmith tracing capture.
+- RAGAS results are reduced NaN-safely (ragas returns per-row score lists);
+  metric selection avoids embeddings calls a local vLLM chat server can't serve.
+
+### Notes & Caveats
+
+- **Measured on node4** (Qwen2.5-7B judge, vLLM :8000, 6-row grounded eval set):
+  **Faithfulness 1.00, context_precision 1.00, context_recall 1.00 → W3 gate PASS.**
+- The eval set is a small synthetic fixture; its reference answers were tightened
+  to be strictly context-grounded (an earlier run scored faithfulness 0.61 because
+  answers carried ungrounded editorial claims — RAGAS correctly flagged it).
+- Faithfulness is judge-dependent; a GPT-4-class judge is the stronger lever for
+  larger/real eval sets. `answer_relevancy` needs an embeddings endpoint
+  (`RAGAS_EMBEDDINGS_BASE_URL`).
+
+---
+
 ## [0.3.1] - 2026-05-27
 
 ### Features

@@ -13,37 +13,79 @@ revision loops, and outputs a structured investment recommendation
 
 ## Architecture
 
-```
-                ┌───────────────────────────────┐
-                │   Data layer                  │
-   ts_code  ──▶ │   Tushare · AKShare · news    │  ──▶ FinBERT / lexicon sentiment
-                └───────────┬───────────────────┘
-                            ▼
-                ┌───────────────────────────────┐
-                │   Hybrid RAG                  │   BM25 + bge-embeddings + reranker
-                │   (Qdrant / in-memory)        │   ± HyDE query expansion
-                └───────────┬───────────────────┘
-                            ▼
-       ┌──────────────────────────────────────────────────────┐
-       │ LangGraph state machine                              │
-       │   data_fetcher → researcher → analyst → risk_control │
-       │                                  ▲          │       │
-       │                                  └── revise ┘       │
-       │   risk_control:HIGH ⇒ analyst again (≤ max_iter)     │
-       │                                                      │
-       │   risk_control:LOW/MED ⇒ output                      │
-       └────────────────────────┬─────────────────────────────┘
-                                 ▼
-                ┌────────────────────────────┐
-                │ Recommendation             │ rating · confidence · rationale ·
-                │ (BUY / HOLD / SELL)        │ risk_factors · target_price
-                └────────────────────────────┘
+```mermaid
+flowchart TD
+    U[/"User<br/>ts_code (+ optional images)"/] -->|POST /analyze| API[FastAPI<br/>analyze endpoint]
+
+    subgraph DataLayer["📊 Data layer (DataProvider protocol)"]
+        TS[Tushare<br/>fundamentals]
+        AK[AKShare<br/>news]
+        SAMP[(data/sample/<br/>synthetic 141 KB)]
+        SENT[FinBERT / lexicon<br/>sentiment]
+    end
+
+    subgraph RAG["🔍 Hybrid RAG"]
+        BM25[BM25] --> RER
+        BGE[bge-embeddings] --> RER[bge-reranker-v2-m3]
+        HYDE[HyDE expand] -.optional.-> BGE
+        QDR[(Qdrant /<br/>in-memory)] --> BM25
+        QDR --> BGE
+    end
+
+    subgraph Vision["🖼️ Multimodal (gated, opt-in)"]
+        IMG[/uploaded images/] --> VAL[SSRF-hardened<br/>validator]
+        VAL --> VLM[Qwen2.5-VL-7B<br/>vLLM 8002]
+    end
+
+    subgraph Graph["🤖 LangGraph state machine (USE_LANGGRAPH=1) · inline fallback"]
+        direction TB
+        DF[data_fetcher]
+        VN["vision-node<br/>(no-op if no images)"]
+        R[researcher]
+        A[analyst]
+        RC[risk_control]
+        OUT[output]
+        DF --> VN --> R --> A --> RC
+        RC -->|HIGH · iter < max_iter| A
+        RC -->|LOW / MED| OUT
+    end
+
+    subgraph LLM["🧠 LLM layer (LLMClient protocol)"]
+        FAKE[Fake LLM<br/>tests / offline]
+        CLOUD[OpenAI / Anthropic]
+        VLLM[Local vLLM<br/>Qwen2.5-7B 8000]
+        ADAPTER[["investforge-analyst<br/>QLoRA r=16 adapter"]]
+        VLLM --- ADAPTER
+    end
+
+    subgraph Eval["📐 Offline metrics"]
+        RAGAS["RAGAS judge<br/>Faithfulness ≥ 0.8"]
+        ALPHA["alphalens tear-sheet<br/>IC · IR · Sharpe · MDD"]
+    end
+
+    LS[(LangSmith tracing)]
+
+    API --> DF
+    DataLayer --> DF
+    SENT --> DF
+    DF -. evidence .-> RAG
+    RAG --> R
+    Vision --> VN
+    R --> LLM
+    RC --> LLM
+    A -. build_analyst_client .-> ADAPTER
+    OUT --> RESP[/"Recommendation<br/>rating · confidence · rationale ·<br/>risk_factors · target_price"/]
+    Graph -. LANGCHAIN_TRACING_V2 .-> LS
+    OUT -. measured by .-> RAGAS
+    RAG -. measured by .-> RAGAS
+    OUT -. signal feeds .-> ALPHA
 ```
 
 Every external dependency (LLM, vector store, data provider, sentiment
-model) is hidden behind a small Protocol so the *entire* pipeline runs
-offline against deterministic fakes — see ``tests/`` and
-``invest_forge/llm/fake.py``.
+model) sits behind a small Protocol so the *entire* pipeline runs offline
+against deterministic fakes — see `tests/` and `invest_forge/llm/fake.py`.
+`USE_LANGGRAPH=true` swaps the in-process inline runner for the compiled
+LangGraph runtime (which is also what lets LangSmith capture traces).
 
 ---
 

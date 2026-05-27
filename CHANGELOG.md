@@ -4,6 +4,38 @@ All version-level changes to InvestForge are documented here.
 
 ---
 
+## [0.4.1] - 2026-05-27
+
+### Features
+
+- **W4 — alphalens tear-sheet + 5-ticker backtest end-to-end:** `load_price_panel`
+  (long CSV → wide DatetimeIndex × ticker close) and `build_factor_panel`
+  (lookahead-safe MultiIndex `(date, asset)` momentum factor) feed both the
+  existing pandas `portfolio_long_short` and a rewired `alphalens_report`
+  (data dict: per-period mean IC, mean return by quantile, n_obs; lazy
+  alphalens + matplotlib-Agg; PNG tear-sheet save in try/except so a tiny-
+  universe failure doesn't crash). New `scripts/run_backtest.py` (laptop
+  pandas path always; `--alphalens` opt-in, server). Streamlit dashboard
+  gains a gated "📈 5-股票回测" expander with equity curve.
+
+### Design Rationale
+
+- 5-asset universe makes the alphalens default `quantiles=5` degenerate
+  (duplicate bin edges); pinned default to 2 and exposed via flag.
+- Pure-pandas path keeps the dashboard + default runner laptop-runnable;
+  alphalens stays a server-only opt-in to preserve laptop import-safety.
+- Factor at t uses prices through t−1 (signal is `price/MA` shifted by 1) and
+  predicts forward returns from t → conservative; no same-day leak.
+
+### Notes & Caveats
+
+- **Measured on the sample** (2024-01-02 → 2024-12-31, 5 A-share tickers):
+  IC 0.0172, IC-IR 0.0343, annualised return +13.29%, Sharpe 0.97, MDD −8.01%
+  (261 obs). Small, synthetic universe — these are smoke numbers, not alpha.
+- alphalens tear-sheet (`--alphalens --out-png`) only on server.
+
+---
+
 ## [0.4.0] - 2026-05-27
 
 ### Features

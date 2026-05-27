@@ -66,7 +66,7 @@ invest_forge/
 ├── scripts/                       # generate_sample_data · build_kb · build_sft_dataset · serve_vllm.sbatch · analyze_client.sh
 ├── docs/                          # W2_LORA_RUNBOOK · VISION_RUNBOOK
 ├── data/sample/                   # synthetic 5-stock dataset (141 KB) — committed
-├── tests/                         # 221 unit tests, network-free
+├── tests/                         # 226 unit tests, network-free
 ├── docker-compose.yml             # qdrant + vllm + vllm-vision (for Docker hosts)
 ├── requirements-gpu.txt           # cu121 GPU stack (driver 535 / CUDA 12.2)
 ├── pyproject.toml · requirements.txt · Makefile
@@ -210,7 +210,7 @@ boot commands, and security model.
 
 ## Tests
 
-221 pytest unit tests, fully network-free, cover:
+226 pytest unit tests, fully network-free, cover:
 
 * domain enums + lenient rating parsing
 * config loader edge cases (missing env, bad int)
@@ -219,7 +219,7 @@ boot commands, and security model.
 * hybrid retriever (BM25, HyDE, reranker), recursive chunking
 * every agent node (researcher / analyst / risk-control / vision / output)
 * end-to-end pipeline including conditional revision loop + iteration cap
-* lookahead-bias-safe signal + simple / cross-sectional backtest
+* lookahead-bias-safe signal + simple / cross-sectional backtest + 5-ticker panel loader / MultiIndex factor builder (alphalens-ready)
 * heuristic quality scorer + RAGAS (stub + real-judge runner, eval-set loader, faithfulness gate)
 * SFT dataset distillation + train/serve prompt parity
 * temperature-augmented distillation (sample ladder, full-identity dedup, prompt-parity)
@@ -240,7 +240,7 @@ pytest -q
 | W1   | Fundamental analysis report on a single A-share name                 | ⏳ on user |
 | W2   | LoRA distill of Qwen2.5-7B analyst + vLLM adapter serving + routing | ✅ **shipped live** (trained → eval → vLLM-served → `/analyze` end-to-end on SLURM) → measured non-ceiling delta on a 200-example temperature-augmented distill set: rating-accuracy 0.867→0.900, confidence-MAE 0.0283→0.0200 (30-ex val); see [docs/W2_LORA_RUNBOOK.md](docs/W2_LORA_RUNBOOK.md) |
 | W3   | Hybrid RAG + RAGAS Faithfulness ≥ 0.8                                | ✅ **measured** on node4 (Qwen2.5-7B judge, 6-row eval set): **Faithfulness 1.00, context_precision 1.00, context_recall 1.00** → gate PASS; real RAGAS runner + judge wiring committed |
-| W4   | 5-ticker end-to-end + alphalens backtest dashboard                   | ✅ skeleton ready |
+| W4   | 5-ticker end-to-end + alphalens backtest dashboard                   | ✅ **measured** on the sample (2024, 261 trading days, 5 tickers): IC 0.0172 / IC-IR 0.0343 / annualised return +13.29% / Sharpe 0.97 / MDD −8.01%; alphalens tear-sheet wired (`scripts/run_backtest.py --alphalens`) + dashboard expander shipped |
 
 ---
 

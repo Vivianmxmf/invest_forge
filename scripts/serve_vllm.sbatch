@@ -5,8 +5,11 @@
 #SBATCH --ntasks=1
 #SBATCH --time=08:00:00
 #SBATCH --output=vllm_%j.log
-# Optional — uncomment if your partition requires explicit GPU requests:
-##SBATCH --gres=gpu:1
+# Reserve one GPU so SLURM sets CUDA_VISIBLE_DEVICES to a FREE card. Without
+# this, vLLM defaults to GPU 0 and collides with anything already there
+# (→ "CUDA out of memory"). Override the count with `--gres=gpu:N` on the CLI;
+# to force a specific card regardless of SLURM, prefix `CUDA_VISIBLE_DEVICES=<idx>`.
+#SBATCH --gres=gpu:1
 # Optional — pin a node:  add `-w node4` on the sbatch command line.
 #
 # Serve Qwen2.5-7B-Instruct + the investforge-analyst LoRA adapter via vLLM on a

@@ -11,11 +11,16 @@ signals at row ``t`` are shifted before computing the realised return at
 """
 from __future__ import annotations
 
+import logging
+import warnings
 from dataclasses import dataclass
-from typing import Iterable
+from pathlib import Path
+from typing import Any, Iterable
 
 import numpy as np
 import pandas as pd
+
+_log = logging.getLogger(__name__)
 
 
 # ───────────────────── Pure-pandas backtest ─────────────────────
@@ -150,15 +155,130 @@ def portfolio_long_short(
     )
 
 
+def load_price_panel(csv_path: str | Path) -> pd.DataFrame:
+    """Read the long-format prices CSV and pivot ``close`` to a wide panel.
+
+    Returns a ``pd.DataFrame`` with:
+    - index: ``pd.DatetimeIndex`` named ``"trade_date"``, sorted ascending.
+    - columns: ``ts_code`` strings, sorted.
+    - values: daily close prices (float).  All-NaN columns are dropped.
+
+    alphalens requires a DatetimeIndex; this function always converts.
+    """
+    df = pd.read_csv(csv_path, parse_dates=["trade_date"])
+    panel = (
+        df.pivot(index="trade_date", columns="ts_code", values="close")
+        .sort_index()
+    )
+    panel.index = pd.DatetimeIndex(panel.index, name="trade_date")
+    panel = panel.dropna(axis=1, how="all")
+    return panel
+
+
+def build_factor_panel(
+    panel_prices: pd.DataFrame,
+    *,
+    window: int = 20,
+) -> pd.Series:
+    """Build an alphalens-compatible factor Series from a wide price panel.
+
+    Applies ``make_lookahead_safe_signal(col, window)`` to every ticker column
+    (already lookahead-safe: signal at ``t`` uses prices up to ``t-1``), then
+    stacks the result into a **MultiIndex Series** with index levels
+    ``("date", "asset")``.  NaN rows are dropped.
+
+    Parameters
+    ----------
+    panel_prices:
+        Wide DataFrame (DatetimeIndex × tickers) as returned by
+        ``load_price_panel``.
+    window:
+        Rolling-MA window passed to ``make_lookahead_safe_signal``.
+
+    Returns
+    -------
+    pd.Series with a 2-level MultiIndex ``(date, asset)`` and float values.
+    """
+    wide = panel_prices.apply(lambda col: make_lookahead_safe_signal(col, window))
+    # Stack wide → long MultiIndex; level order after stack is (row, col).
+    stacked = wide.stack(future_stack=True).dropna()
+    stacked.index.names = ["date", "asset"]
+    return stacked
+
+
 def alphalens_report(
     factor: pd.Series,
     prices: pd.DataFrame,
     *,
     periods: Iterable[int] = (1, 5, 20),
-):  # pragma: no cover - thin alphalens wrapper for the server
-    """Generate the classic alphalens tear sheet (used in W3/W4 capstone)."""
-    from alphalens.utils import get_clean_factor_and_forward_returns
-    from alphalens.tears import create_full_tear_sheet
+    quantiles: int = 2,
+    out_png: str | Path | None = None,
+) -> dict[str, Any]:  # pragma: no cover - alphalens lines; exercised on server only
+    """Generate alphalens analytics and return a data dict (server-only).
 
-    data = get_clean_factor_and_forward_returns(factor, prices, periods=tuple(periods))
-    return create_full_tear_sheet(data)
+    Parameters
+    ----------
+    factor:
+        MultiIndex Series ``(date, asset)`` — use ``build_factor_panel``.
+    prices:
+        Wide DataFrame (DatetimeIndex × tickers) — use ``load_price_panel``.
+    periods:
+        Forward-return horizons in trading days.
+    quantiles:
+        Number of quantile buckets.  Defaults to 2 for small universes (≤5
+        assets) to avoid duplicate bin-edge errors.
+    out_png:
+        If given, attempt to save a full tear-sheet PNG here.  A tiny-universe
+        failure is caught and only logged — data is still returned.
+
+    Returns
+    -------
+    dict with keys:
+    - ``"mean_ic"``: ``{period_str: float}`` — per-period mean IC.
+    - ``"mean_return_by_quantile"``: ``{period_str: {quantile_str: float}}``.
+    - ``"n_obs"``: int — number of (date, asset) observations.
+    """
+    # All alphalens imports are lazy so the module is usable without alphalens.
+    from alphalens.utils import get_clean_factor_and_forward_returns  # pragma: no cover
+    import alphalens.performance as alperf  # pragma: no cover
+
+    periods_tuple = tuple(periods)  # pragma: no cover
+    factor_data = get_clean_factor_and_forward_returns(  # pragma: no cover
+        factor, prices, periods=periods_tuple, quantiles=quantiles
+    )
+
+    # ── Mean IC per forward-return period ─────────────────────────────────
+    ic_series = alperf.factor_information_coefficient(factor_data).mean()  # pragma: no cover
+    mean_ic: dict[str, float] = {str(k): float(v) for k, v in ic_series.items()}  # pragma: no cover
+
+    # ── Mean return by quantile ────────────────────────────────────────────
+    mean_ret_raw, _ = alperf.mean_return_by_quantile(factor_data)  # pragma: no cover
+    mean_return_by_quantile: dict[str, dict[str, float]] = {}  # pragma: no cover
+    for col in mean_ret_raw.columns:  # pragma: no cover
+        mean_return_by_quantile[str(col)] = {  # pragma: no cover
+            str(q): float(v) for q, v in mean_ret_raw[col].items()  # pragma: no cover
+        }  # pragma: no cover
+
+    result: dict[str, Any] = {  # pragma: no cover
+        "mean_ic": mean_ic,  # pragma: no cover
+        "mean_return_by_quantile": mean_return_by_quantile,  # pragma: no cover
+        "n_obs": int(len(factor_data)),  # pragma: no cover
+    }  # pragma: no cover
+
+    # ── Optional PNG tear-sheet (best-effort, non-fatal) ──────────────────
+    if out_png is not None:  # pragma: no cover
+        import matplotlib  # pragma: no cover
+        matplotlib.use("Agg")  # must be set BEFORE importing pyplot  # pragma: no cover
+        import matplotlib.pyplot as plt  # pragma: no cover
+        from alphalens.tears import create_full_tear_sheet  # pragma: no cover
+        try:  # pragma: no cover
+            create_full_tear_sheet(factor_data)  # pragma: no cover
+            plt.savefig(out_png, bbox_inches="tight", dpi=150)  # pragma: no cover
+            plt.close("all")  # pragma: no cover
+        except Exception as exc:  # pragma: no cover
+            _log.warning(  # pragma: no cover
+                "alphalens tear-sheet PNG generation failed (likely tiny universe): %s", exc  # pragma: no cover
+            )  # pragma: no cover
+            plt.close("all")  # pragma: no cover
+
+    return result  # pragma: no cover

@@ -16,6 +16,11 @@ from invest_forge.agents.graph import GraphDeps, run_pipeline_inline  # noqa: E4
 from invest_forge.api.main import _select_retriever  # noqa: E402 - reuse production logic
 from invest_forge.common.config import get_settings  # noqa: E402
 from invest_forge.llm.client import build_client, build_vision_client  # noqa: E402
+from invest_forge.tools.backtest_tools import (  # noqa: E402
+    load_price_panel,
+    make_lookahead_safe_signal,
+    portfolio_long_short,
+)
 from invest_forge.tools.data_tools import build_provider  # noqa: E402
 from invest_forge.tools.image_input import (  # noqa: E402
     ImagePolicy,
@@ -159,3 +164,61 @@ if go and ts_code:
     if vision_analysis:
         with st.expander("视觉分析 (VLM)"):
             st.markdown(vision_analysis)
+
+# ── Gated backtest section (pure pandas, no alphalens) ────────────────────────
+st.divider()
+with st.expander("📈 5-股票回测 (sample)"):
+    st.caption(
+        "基于 data/sample/prices.csv 的5支股票样本，使用纯 pandas 截面 long-short 回测。"
+        "无需 alphalens 或 API 密钥。"
+    )
+    bt_window = st.slider("MA 窗口 (天)", min_value=5, max_value=60, value=20, step=5)
+    bt_top_n = st.slider("每侧持仓数 (top-N)", min_value=1, max_value=2, value=2, step=1)
+    run_bt = st.button("运行回测", key="run_backtest_btn")
+
+    if run_bt:
+        try:
+            _settings = get_settings()
+            _prices_csv = _settings.paths.sample_dir / "prices.csv"
+            _panel = load_price_panel(_prices_csv)
+            _factor_wide = _panel.apply(
+                lambda col: make_lookahead_safe_signal(col, bt_window)
+            )
+            _bt_result = portfolio_long_short(_panel, _factor_wide, top_n=bt_top_n)
+
+            # ── Metrics ──────────────────────────────────────────────────────
+            m1, m2, m3, m4, m5 = st.columns(5)
+            m1.metric("IC Mean", f"{_bt_result.ic_mean:+.4f}")
+            m2.metric("IC IR", f"{_bt_result.ic_ir:+.4f}")
+            m3.metric("年化收益", f"{_bt_result.annualised_return:+.2%}")
+            m4.metric("Sharpe", f"{_bt_result.sharpe:+.4f}")
+            m5.metric("最大回撤", f"{_bt_result.max_drawdown:+.2%}")
+
+            # ── Equity curve ────────────────────────────────────────────────
+            _weights = (
+                _factor_wide.shift(1)
+                .rank(axis=1, ascending=False)
+                .le(min(bt_top_n, max(1, len(_panel.columns) // 2)))
+                .astype(float)
+            )
+            _short_mask = (
+                _factor_wide.shift(1)
+                .rank(axis=1, ascending=True)
+                .le(min(bt_top_n, max(1, len(_panel.columns) // 2)))
+            )
+            _w = _weights - _short_mask.astype(float)
+            _w_sum = _w.abs().sum(axis=1).replace(0, float("nan"))
+            _w = _w.div(_w_sum, axis=0).fillna(0)
+            _daily_ret = (_panel.pct_change() * _w).sum(axis=1).dropna()
+            _equity = (1.0 + _daily_ret).cumprod()
+            _equity.name = "净值"
+
+            st.subheader("策略净值曲线")
+            st.line_chart(_equity)
+            st.caption(
+                f"股票池: {', '.join(_panel.columns.tolist())}  |  "
+                f"日期: {_panel.index[0].date()} → {_panel.index[-1].date()}  |  "
+                f"N obs: {_bt_result.n_obs}"
+            )
+        except Exception as _bt_exc:
+            st.warning(f"回测出错: {_bt_exc}")

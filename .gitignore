@@ -8,6 +8,9 @@ reference_papers/
 references/
 papers/
 
+# Personal study material — kept local, not for distribution
+docs/INTERVIEW_PREP.md
+
 # Python
 __pycache__/
 *.py[cod]

@@ -135,10 +135,28 @@ srun --jobid=<jobid> --overlap --pty bash
 bash scripts/analyze_client.sh 688981.SH
 ```
 
+**GPU / port pitfalls (learned the hard way).** `serve_vllm.sbatch` ships with
+`--gres=gpu:1` commented out, so SLURM reserves no specific card and vLLM
+defaults to **GPU 0**. If GPU 0 is already busy (a stale server, a training
+job), startup dies with `CUDA out of memory`; if its port is taken you get
+`Address already in use`. Pin a free card and/or an open port at submit time —
+both env vars are honoured by the script:
+
+```bash
+nvidia-smi --query-gpu=index,memory.free --format=csv   # find an idle card
+CUDA_VISIBLE_DEVICES=6 PORT=8001 sbatch scripts/serve_vllm.sbatch
+VLLM_PORT=8001 bash scripts/analyze_client.sh 688981.SH  # client must match the port
+```
+
+A leftover server squats both the card and the port — `kill <pid>` it (the OOM
+trace prints the offending PID) or just dodge to a free card + port as above.
+
 > See [`docs/W2_LORA_RUNBOOK.md`](docs/W2_LORA_RUNBOOK.md) for the full
 > fine-tuning workflow and [`scripts/serve_vllm.sbatch`](scripts/serve_vllm.sbatch)
-> for the SLURM serving recipe (validated end-to-end on node4: `/analyze`
-> returns a full recommendation with the analyst node served by the adapter).
+> for the SLURM serving recipe — validated end-to-end on node4: the
+> **temperature-augmented, retrained** `investforge-analyst` adapter serves the
+> analyst node and `/analyze` returns a full BUY/HOLD/SELL recommendation
+> (rating · confidence · rationale · risk_factors · target_price).
 
 ---
 

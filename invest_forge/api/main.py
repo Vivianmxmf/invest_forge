@@ -9,13 +9,14 @@ POST /analyze {"ts_code": "688981.SH", "images": [{"kind": "base64", "value": ".
 """
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from invest_forge.agents.graph import GraphDeps, run_pipeline_inline
+from invest_forge.agents.graph import GraphDeps, _initial_state, build_invest_graph, run_pipeline_inline
 from invest_forge.common.config import get_settings
 from invest_forge.common.logging_setup import get_logger
 from invest_forge.knowledge_base.builder import build_in_memory
@@ -194,6 +195,38 @@ async def lifespan(app: FastAPI):
         app.state.deps.analyst_client.name if app.state.deps.analyst_client else "shared",
         app.state.deps.vision_client.name if app.state.deps.vision_client else "disabled",
     )
+
+    # ── LangSmith tracing setup ──────────────────────────────────────────────
+    # Tracing only captures node transitions when running via the LangGraph
+    # runtime (a LangChain Runnable), not the inline path.
+    if settings.observability.langsmith_tracing:
+        # FORCE the canonical "true": config's _bool accepts "1"/"yes"/"on" as
+        # enabled, but LangSmith's tracing_is_enabled() checks env == "true"
+        # exactly.  We only enter this branch when the flag (read from the same
+        # env var) is already True, so this just normalizes "1"/"yes" → "true".
+        os.environ["LANGCHAIN_TRACING_V2"] = "true"
+        # Keep setdefault here — never clobber a user's explicit project name.
+        os.environ.setdefault("LANGCHAIN_PROJECT", settings.observability.langsmith_project)
+        logger.info("LangSmith tracing ON (project=%s)", settings.observability.langsmith_project)
+        if not settings.observability.langsmith_api_key:
+            logger.warning(
+                "LANGCHAIN_API_KEY is not set — LangSmith traces will not be exported"
+            )
+
+    # ── Runner selection ─────────────────────────────────────────────────────
+    app.state.graph = None
+    if settings.use_langgraph:
+        try:
+            app.state.graph = build_invest_graph(app.state.deps)
+            logger.info("analyze runner = LangGraph runtime")
+        except ImportError:
+            logger.warning(
+                "USE_LANGGRAPH=true but langgraph is not installed; "
+                "falling back to in-process inline runner"
+            )
+    else:
+        logger.info("analyze runner = in-process inline")
+
     yield
 
 
@@ -221,11 +254,14 @@ def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
             raise HTTPException(status_code=400, detail="invalid image input")
         input_images = [v.data_url for v in validated]
 
-    state = run_pipeline_inline(
-        app.state.deps,
-        ts_code=req.ts_code,
-        input_images=input_images or None,
-    )
+    if app.state.graph is not None:
+        state = app.state.graph.invoke(_initial_state(req.ts_code, input_images or None))
+    else:
+        state = run_pipeline_inline(
+            app.state.deps,
+            ts_code=req.ts_code,
+            input_images=input_images or None,
+        )
     return AnalyzeResponse(
         ts_code=req.ts_code,
         final_recommendation=state.get("final_recommendation", {}),

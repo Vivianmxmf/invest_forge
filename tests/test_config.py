@@ -34,5 +34,19 @@ def test_invalid_int_raises(monkeypatch):
 
 
 @pytest.mark.unit
+def test_use_langgraph_env_parsing(monkeypatch) -> None:
+    """USE_LANGGRAPH env var is correctly parsed by get_settings."""
+    monkeypatch.setenv("USE_LANGGRAPH", "true")
+    config_module.get_settings.cache_clear()
+    settings = config_module.get_settings()
+    assert settings.use_langgraph is True
+
+    monkeypatch.delenv("USE_LANGGRAPH", raising=False)
+    config_module.get_settings.cache_clear()
+    settings = config_module.get_settings()
+    assert settings.use_langgraph is False
+
+
+@pytest.mark.unit
 def teardown_module(_module):  # noqa: PT028 - module-level teardown
     config_module.get_settings.cache_clear()

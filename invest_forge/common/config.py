@@ -99,6 +99,10 @@ class Settings:
     api_host: str
     api_port: int
     dashboard_port: int
+    # When True the API uses the compiled LangGraph runtime (``build_invest_graph``)
+    # instead of the in-process inline runner.  Default False so the whole
+    # pipeline works offline without langgraph installed.
+    use_langgraph: bool = False
 
 
 @lru_cache(maxsize=1)
@@ -147,4 +151,5 @@ def get_settings() -> Settings:
         api_host=os.getenv("API_HOST", "0.0.0.0"),
         api_port=_int("API_PORT", 8001),
         dashboard_port=_int("DASHBOARD_PORT", 8501),
+        use_langgraph=_bool("USE_LANGGRAPH", False),
     )

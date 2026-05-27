@@ -98,6 +98,43 @@ def build_invest_graph(deps: GraphDeps):  # pragma: no cover - exercised by inte
     return graph.compile()
 
 
+# ───────────────────── Shared state initialiser ─────────────────────
+
+def _initial_state(ts_code: str, input_images: list[str] | None) -> InvestState:
+    """Return an ``InvestState`` seed with ``ts_code`` (and optionally
+    ``input_images``) pre-populated.
+
+    Used by both ``run_pipeline_inline`` and ``run_pipeline_graph`` so that
+    the two runners start from an identical seed state.
+    """
+    state: InvestState = empty_state()
+    state["ts_code"] = ts_code
+    if input_images:
+        state["input_images"] = list(input_images)
+    return state
+
+
+# ───────────────────── LangGraph runner ─────────────────────
+
+def run_pipeline_graph(
+    deps: GraphDeps,
+    *,
+    ts_code: str,
+    input_images: list[str] | None = None,
+) -> InvestState:
+    """Execute the pipeline through the compiled LangGraph runtime.
+
+    Requires the ``langgraph`` package (server path only).  Unlike
+    ``run_pipeline_inline``, this runner goes through a LangChain
+    Runnable so LangSmith tracing captures every node transition when
+    ``LANGCHAIN_TRACING_V2=true`` is set in the environment.
+
+    Raises ``ImportError`` if ``langgraph`` is not installed.
+    """
+    compiled = build_invest_graph(deps)
+    return compiled.invoke(_initial_state(ts_code, input_images))
+
+
 # ───────────────────── In-process runner ─────────────────────
 
 def run_pipeline_inline(
@@ -126,10 +163,7 @@ def run_pipeline_inline(
     risk_control = make_risk_control_node(deps.llm)
     output = make_output_node()
 
-    state: InvestState = empty_state()
-    state["ts_code"] = ts_code
-    if input_images:
-        state["input_images"] = list(input_images)
+    state: InvestState = _initial_state(ts_code, input_images)
 
     state = _merge(state, data_fetcher(state))
     # vision is a no-op when vision_client is None or no images present.

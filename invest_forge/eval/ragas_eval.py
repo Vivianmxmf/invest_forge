@@ -5,16 +5,61 @@ heavy dependency is not installed on the laptop.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Iterable
+
+# All RAGAS metrics this wrapper knows how to run.  ``answer_relevancy`` is the
+# only one that needs an EMBEDDINGS endpoint; the other three are LLM-only and
+# work against a plain chat endpoint (e.g. a local vLLM server with no
+# /v1/embeddings).  Default selection therefore excludes answer_relevancy so a
+# chat-only judge produces the W3 faithfulness number without connection errors.
+_ALL_METRICS: tuple[str, ...] = (
+    "faithfulness",
+    "answer_relevancy",
+    "context_precision",
+    "context_recall",
+)
+_EMBEDDING_METRICS: frozenset[str] = frozenset({"answer_relevancy"})
+DEFAULT_METRICS: tuple[str, ...] = (
+    "faithfulness",
+    "context_precision",
+    "context_recall",
+)
 
 
 @dataclass(frozen=True)
 class RagasReport:
-    faithfulness: float
-    answer_relevancy: float
-    context_precision: float
-    context_recall: float
+    # NaN defaults so a partial run (a subset of metrics, or jobs that failed
+    # against an unreachable endpoint) still yields a report instead of crashing.
+    faithfulness: float = float("nan")
+    answer_relevancy: float = float("nan")
+    context_precision: float = float("nan")
+    context_recall: float = float("nan")
+
+
+def _to_scalar(value: Any) -> float:
+    """Reduce a RAGAS metric result to a single float, NaN-safe.
+
+    Newer ragas returns per-row score *lists* from ``result[name]`` (older
+    versions returned a scalar).  A per-row list may also contain NaN for rows
+    whose judge/embedding call failed.  Average the finite values; return NaN
+    when nothing usable is present or the value is not numeric.
+    """
+    if isinstance(value, (list, tuple)):
+        finite: list[float] = []
+        for v in value:
+            try:
+                f = float(v)  # per-element cast may fail on str/dict/None
+            except (TypeError, ValueError):
+                continue
+            if not math.isnan(f):
+                finite.append(f)
+        return sum(finite) / len(finite) if finite else float("nan")
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float("nan")
 
 
 def evaluate_ragas(
@@ -25,6 +70,7 @@ def evaluate_ragas(
     ground_truths: list[str],
     judge_llm: Any = None,
     judge_embeddings: Any = None,
+    metrics: list[str] | None = None,
 ) -> RagasReport:  # pragma: no cover - ragas integration
     """Run RAGAS metrics over an eval set.
 
@@ -39,11 +85,24 @@ def evaluate_ragas(
         judge_llm: Optional pre-built ragas LLM wrapper (e.g. from
             ``build_ragas_judge``).  When None, ragas defaults to OpenAI.
         judge_embeddings: Optional pre-built ragas embeddings wrapper.
-            When None, ragas defaults to OpenAI embeddings.  Required for
-            answer_relevancy and context_precision metrics.
+            When None, ragas defaults to OpenAI embeddings.  Only needed for
+            ``answer_relevancy``.
+        metrics: Which metrics to run; defaults to ``DEFAULT_METRICS`` (the
+            three LLM-only metrics).  Include ``"answer_relevancy"`` only when
+            an embeddings endpoint is available, or its jobs fail with
+            connection errors (reported as NaN).
+
+    Returns:
+        A ``RagasReport``; metrics not selected (or whose jobs all failed) are
+        reported as NaN.
     """
+    # Both validations run BEFORE the ragas import so they are testable offline.
     if not (len(questions) == len(answers) == len(contexts) == len(ground_truths)):
         raise ValueError("RAGAS inputs must have equal length")
+    selected = list(metrics) if metrics else list(DEFAULT_METRICS)
+    unknown = [m for m in selected if m not in _ALL_METRICS]
+    if unknown:
+        raise ValueError(f"unknown RAGAS metric(s): {unknown}; valid: {list(_ALL_METRICS)}")
 
     from datasets import Dataset
     from ragas import evaluate
@@ -53,6 +112,13 @@ def evaluate_ragas(
         context_recall,
         faithfulness,
     )
+
+    metric_objs = {
+        "faithfulness": faithfulness,
+        "answer_relevancy": answer_relevancy,
+        "context_precision": context_precision,
+        "context_recall": context_recall,
+    }
 
     ds = Dataset.from_dict(
         {
@@ -65,7 +131,7 @@ def evaluate_ragas(
 
     eval_kwargs: dict[str, Any] = {
         "dataset": ds,
-        "metrics": [faithfulness, answer_relevancy, context_precision, context_recall],
+        "metrics": [metric_objs[m] for m in selected],
     }
     if judge_llm is not None:
         eval_kwargs["llm"] = judge_llm
@@ -73,11 +139,20 @@ def evaluate_ragas(
         eval_kwargs["embeddings"] = judge_embeddings
 
     result = evaluate(**eval_kwargs)
+
+    def _extract(name: str) -> float:
+        if name not in selected:
+            return float("nan")
+        try:
+            return _to_scalar(result[name])
+        except (KeyError, TypeError, IndexError):
+            return float("nan")
+
     return RagasReport(
-        faithfulness=float(result["faithfulness"]),
-        answer_relevancy=float(result["answer_relevancy"]),
-        context_precision=float(result["context_precision"]),
-        context_recall=float(result["context_recall"]),
+        faithfulness=_extract("faithfulness"),
+        answer_relevancy=_extract("answer_relevancy"),
+        context_precision=_extract("context_precision"),
+        context_recall=_extract("context_recall"),
     )
 
 
@@ -101,10 +176,13 @@ def build_ragas_judge(settings: Any = None) -> tuple[Any, Any]:  # pragma: no co
         ``(wrapped_llm, wrapped_embeddings)`` — both are ragas-compatible
         wrappers ready to pass to ``evaluate_ragas``.
     """
+    import os
+
     from invest_forge.common.config import get_settings as _get_settings
 
-    cfg = (settings or _get_settings()).llm
-    vec_cfg = (settings or _get_settings()).vector_store
+    resolved = settings or _get_settings()
+    cfg = resolved.llm
+    vec_cfg = resolved.vector_store
 
     from langchain_openai import ChatOpenAI, OpenAIEmbeddings
     from ragas.embeddings import LangchainEmbeddingsWrapper
@@ -121,12 +199,15 @@ def build_ragas_judge(settings: Any = None) -> tuple[Any, Any]:  # pragma: no co
     )
     wrapped_llm = LangchainLLMWrapper(chat_model)
 
-    # Use the embedding model from vector_store config when available,
-    # otherwise fall back to a sensible OpenAI default.
+    # Embeddings (only used by answer_relevancy).  A local vLLM CHAT server has
+    # no /v1/embeddings, so allow a separate endpoint via RAGAS_EMBEDDINGS_BASE_URL
+    # (e.g. point it at OpenAI or a dedicated embedding container).  Falls back
+    # to the judge's base_url otherwise.
     embedding_model = getattr(vec_cfg, "embedding_model", None) or "text-embedding-3-small"
+    embeddings_base_url = os.getenv("RAGAS_EMBEDDINGS_BASE_URL") or base_url
     embeddings = OpenAIEmbeddings(
         model=embedding_model,
-        base_url=base_url,
+        base_url=embeddings_base_url,
         api_key=api_key,  # type: ignore[arg-type]
     )
     wrapped_embeddings = LangchainEmbeddingsWrapper(embeddings)

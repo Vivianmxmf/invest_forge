@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import sys
 from pathlib import Path
 from typing import Any
@@ -112,15 +113,20 @@ def meets_faithfulness(report: RagasReport, threshold: float) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def _fmt(score: float) -> str:
+    """Format a metric, showing 'n/a (not run)' for NaN (skipped/failed)."""
+    return "n/a (not run)" if math.isnan(score) else f"{score:.4f}"
+
+
 def _print_report(report: RagasReport, threshold: float) -> None:
     """Print the 4 RAGAS metrics and the W3 faithfulness gate result."""
     print("\n" + "=" * 60)
     print("  RAGAS Evaluation Results")
     print("=" * 60)
-    print(f"  faithfulness      : {report.faithfulness:.4f}")
-    print(f"  answer_relevancy  : {report.answer_relevancy:.4f}")
-    print(f"  context_precision : {report.context_precision:.4f}")
-    print(f"  context_recall    : {report.context_recall:.4f}")
+    print(f"  faithfulness      : {_fmt(report.faithfulness)}")
+    print(f"  answer_relevancy  : {_fmt(report.answer_relevancy)}")
+    print(f"  context_precision : {_fmt(report.context_precision)}")
+    print(f"  context_recall    : {_fmt(report.context_recall)}")
     print("-" * 60)
     gate = meets_faithfulness(report, threshold)
     status = "PASS" if gate else "FAIL"
@@ -167,7 +173,24 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         help="Optional path to write the report as JSON.",
     )
+    parser.add_argument(
+        "--metrics",
+        default=None,
+        help=(
+            "Comma-separated RAGAS metrics to run. Default: the LLM-only set "
+            "(faithfulness,context_precision,context_recall) — works on a chat "
+            "endpoint. Add 'answer_relevancy' ONLY when an embeddings endpoint "
+            "is available (see RAGAS_EMBEDDINGS_BASE_URL), else its jobs fail "
+            "with connection errors and report NaN."
+        ),
+    )
     args = parser.parse_args(argv)
+
+    selected_metrics = (
+        [m.strip() for m in args.metrics.split(",") if m.strip()]
+        if args.metrics
+        else None
+    )
 
     eval_path = Path(args.eval_set)
     logger.info("Loading eval set: %s", eval_path)
@@ -185,7 +208,7 @@ def main(argv: list[str] | None = None) -> None:
 
         logger.info("Building RAGAS judge from settings")
         judge_llm, judge_emb = build_ragas_judge(get_settings())
-        logger.info("Running evaluate_ragas (network I/O) …")
+        logger.info("Running evaluate_ragas (network I/O) … metrics=%s", selected_metrics or "default")
         report = evaluate_ragas(
             questions=questions,
             answers=answers,
@@ -193,6 +216,7 @@ def main(argv: list[str] | None = None) -> None:
             ground_truths=ground_truths,
             judge_llm=judge_llm,
             judge_embeddings=judge_emb,
+            metrics=selected_metrics,
         )
 
     _print_report(report, args.threshold)

@@ -66,7 +66,7 @@ invest_forge/
 ├── scripts/                       # generate_sample_data · build_kb · build_sft_dataset · serve_vllm.sbatch · analyze_client.sh
 ├── docs/                          # W2_LORA_RUNBOOK · VISION_RUNBOOK
 ├── data/sample/                   # synthetic 5-stock dataset (141 KB) — committed
-├── tests/                         # 218 unit tests, network-free
+├── tests/                         # 221 unit tests, network-free
 ├── docker-compose.yml             # qdrant + vllm + vllm-vision (for Docker hosts)
 ├── requirements-gpu.txt           # cu121 GPU stack (driver 535 / CUDA 12.2)
 ├── pyproject.toml · requirements.txt · Makefile
@@ -210,7 +210,7 @@ boot commands, and security model.
 
 ## Tests
 
-218 pytest unit tests, fully network-free, cover:
+221 pytest unit tests, fully network-free, cover:
 
 * domain enums + lenient rating parsing
 * config loader edge cases (missing env, bad int)

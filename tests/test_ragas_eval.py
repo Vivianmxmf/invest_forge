@@ -48,6 +48,55 @@ def test_evaluate_ragas_length_mismatch_raises() -> None:
         )
 
 
+@pytest.mark.unit
+def test_evaluate_ragas_unknown_metric_raises() -> None:
+    """An unknown metric name must raise before the lazy ragas import."""
+    from invest_forge.eval.ragas_eval import evaluate_ragas
+
+    with pytest.raises(ValueError, match="unknown RAGAS metric"):
+        evaluate_ragas(
+            questions=["q1"],
+            answers=["a1"],
+            contexts=[["c1"]],
+            ground_truths=["g1"],
+            metrics=["faithfulness", "bogus_metric"],
+        )
+
+
+@pytest.mark.unit
+def test_to_scalar_reduces_lists_nan_safe() -> None:
+    """_to_scalar: list → mean of finite values; scalar passthrough; junk → NaN.
+
+    Newer ragas returns per-row score lists (possibly with NaN for failed
+    jobs); this guards the regression where float(list) crashed.
+    """
+    import math
+
+    from invest_forge.eval.ragas_eval import _to_scalar
+
+    assert _to_scalar([0.6, 0.8, 1.0]) == pytest.approx(0.8)
+    # NaN entries (failed jobs) are dropped from the mean.
+    assert _to_scalar([0.5, float("nan"), 0.7]) == pytest.approx(0.6)
+    assert _to_scalar(0.42) == pytest.approx(0.42)
+    # Non-numeric elements INSIDE a list (str/dict/None) are skipped, not raised.
+    assert _to_scalar(["not-a-number", 0.8]) == pytest.approx(0.8)
+    assert _to_scalar([{}, None, 0.6]) == pytest.approx(0.6)
+    # All-NaN / empty / non-numeric → NaN (report, don't crash).
+    assert math.isnan(_to_scalar([float("nan")]))
+    assert math.isnan(_to_scalar(["junk", {}, None]))
+    assert math.isnan(_to_scalar([]))
+    assert math.isnan(_to_scalar("not-a-number"))
+
+
+@pytest.mark.unit
+def test_default_metrics_exclude_answer_relevancy() -> None:
+    """The chat-only default must omit answer_relevancy (it needs embeddings)."""
+    from invest_forge.eval.ragas_eval import DEFAULT_METRICS
+
+    assert "answer_relevancy" not in DEFAULT_METRICS
+    assert "faithfulness" in DEFAULT_METRICS
+
+
 # ---------------------------------------------------------------------------
 # 2. Committed eval set parses correctly
 # ---------------------------------------------------------------------------

@@ -66,7 +66,7 @@ invest_forge/
 ├── scripts/                       # generate_sample_data · build_kb · build_sft_dataset · serve_vllm.sbatch · analyze_client.sh
 ├── docs/                          # W2_LORA_RUNBOOK · VISION_RUNBOOK
 ├── data/sample/                   # synthetic 5-stock dataset (141 KB) — committed
-├── tests/                         # 210 unit tests, network-free
+├── tests/                         # 218 unit tests, network-free
 ├── docker-compose.yml             # qdrant + vllm + vllm-vision (for Docker hosts)
 ├── requirements-gpu.txt           # cu121 GPU stack (driver 535 / CUDA 12.2)
 ├── pyproject.toml · requirements.txt · Makefile
@@ -210,7 +210,7 @@ boot commands, and security model.
 
 ## Tests
 
-210 pytest unit tests, fully network-free, cover:
+218 pytest unit tests, fully network-free, cover:
 
 * domain enums + lenient rating parsing
 * config loader edge cases (missing env, bad int)
@@ -220,9 +220,10 @@ boot commands, and security model.
 * every agent node (researcher / analyst / risk-control / vision / output)
 * end-to-end pipeline including conditional revision loop + iteration cap
 * lookahead-bias-safe signal + simple / cross-sectional backtest
-* heuristic quality scorer + RAGAS stub
+* heuristic quality scorer + RAGAS (stub + real-judge runner, eval-set loader, faithfulness gate)
 * SFT dataset distillation + train/serve prompt parity
 * temperature-augmented distillation (sample ladder, full-identity dedup, prompt-parity)
+* LangGraph runtime end-to-end + graph/inline parity (runs on server; skipped when langgraph absent)
 * SSRF-hardened image-input validator (IP pinning, path traversal, bombs)
 * multimodal vision wiring (ChatMessage images, vision node gating)
 
@@ -238,7 +239,7 @@ pytest -q
 |------|----------------------------------------------------------------------|--------|
 | W1   | Fundamental analysis report on a single A-share name                 | ⏳ on user |
 | W2   | LoRA distill of Qwen2.5-7B analyst + vLLM adapter serving + routing | ✅ **shipped live** (trained → eval → vLLM-served → `/analyze` end-to-end on SLURM) → measured non-ceiling delta on a 200-example temperature-augmented distill set: rating-accuracy 0.867→0.900, confidence-MAE 0.0283→0.0200 (30-ex val); see [docs/W2_LORA_RUNBOOK.md](docs/W2_LORA_RUNBOOK.md) |
-| W3   | Hybrid RAG + RAGAS Faithfulness ≥ 0.8                                | ✅ stub eval ready |
+| W3   | Hybrid RAG + RAGAS Faithfulness ≥ 0.8                                | ✅ real RAGAS runner + judge wiring + committed eval set (`data/sample/ragas_eval_set.jsonl`, 6 rows) ready; measured Faithfulness number pending server run |
 | W4   | 5-ticker end-to-end + alphalens backtest dashboard                   | ✅ skeleton ready |
 
 ---

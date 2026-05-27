@@ -6,7 +6,7 @@ heavy dependency is not installed on the laptop.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Any, Iterable
 
 
 @dataclass(frozen=True)
@@ -23,11 +23,24 @@ def evaluate_ragas(
     answers: list[str],
     contexts: list[list[str]],
     ground_truths: list[str],
+    judge_llm: Any = None,
+    judge_embeddings: Any = None,
 ) -> RagasReport:  # pragma: no cover - ragas integration
     """Run RAGAS metrics over an eval set.
 
     The arrays must have the same length.  This call performs network IO
     (uses an LLM judge), so it is *only* meant for server / CI runs.
+
+    Args:
+        questions: List of evaluation questions.
+        answers: List of model-generated answers.
+        contexts: List of context lists (one list of strings per question).
+        ground_truths: List of reference ground-truth answers.
+        judge_llm: Optional pre-built ragas LLM wrapper (e.g. from
+            ``build_ragas_judge``).  When None, ragas defaults to OpenAI.
+        judge_embeddings: Optional pre-built ragas embeddings wrapper.
+            When None, ragas defaults to OpenAI embeddings.  Required for
+            answer_relevancy and context_precision metrics.
     """
     if not (len(questions) == len(answers) == len(contexts) == len(ground_truths)):
         raise ValueError("RAGAS inputs must have equal length")
@@ -49,16 +62,76 @@ def evaluate_ragas(
             "ground_truth": ground_truths,
         }
     )
-    result = evaluate(
-        ds,
-        metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
-    )
+
+    eval_kwargs: dict[str, Any] = {
+        "dataset": ds,
+        "metrics": [faithfulness, answer_relevancy, context_precision, context_recall],
+    }
+    if judge_llm is not None:
+        eval_kwargs["llm"] = judge_llm
+    if judge_embeddings is not None:
+        eval_kwargs["embeddings"] = judge_embeddings
+
+    result = evaluate(**eval_kwargs)
     return RagasReport(
         faithfulness=float(result["faithfulness"]),
         answer_relevancy=float(result["answer_relevancy"]),
         context_precision=float(result["context_precision"]),
         context_recall=float(result["context_recall"]),
     )
+
+
+def build_ragas_judge(settings: Any = None) -> tuple[Any, Any]:  # pragma: no cover
+    """Build a LangChain-backed RAGAS judge LLM and embeddings wrapper.
+
+    Reads LLM settings to construct a ChatOpenAI-compatible judge that works
+    with either the OpenAI API or a local vLLM endpoint (set
+    ``LOCAL_LLM_BASE_URL`` and ``LOCAL_LLM_MODEL``).
+
+    Note: answer_relevancy and context_precision require a working embeddings
+    endpoint.  When using a local vLLM server, ensure it exposes the
+    ``/v1/embeddings`` endpoint (e.g. via ``--served-model-name`` or a
+    dedicated embedding model container).
+
+    Args:
+        settings: A ``Settings`` object from ``get_settings()``.  When None,
+            ``get_settings()`` is called automatically.
+
+    Returns:
+        ``(wrapped_llm, wrapped_embeddings)`` — both are ragas-compatible
+        wrappers ready to pass to ``evaluate_ragas``.
+    """
+    from invest_forge.common.config import get_settings as _get_settings
+
+    cfg = (settings or _get_settings()).llm
+    vec_cfg = (settings or _get_settings()).vector_store
+
+    from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+    from ragas.embeddings import LangchainEmbeddingsWrapper
+    from ragas.llms import LangchainLLMWrapper
+
+    model_name = cfg.local_model or cfg.model
+    base_url = cfg.local_base_url or None
+    api_key = cfg.openai_api_key or "EMPTY"
+
+    chat_model = ChatOpenAI(
+        model=model_name,
+        base_url=base_url,
+        api_key=api_key,  # type: ignore[arg-type]
+    )
+    wrapped_llm = LangchainLLMWrapper(chat_model)
+
+    # Use the embedding model from vector_store config when available,
+    # otherwise fall back to a sensible OpenAI default.
+    embedding_model = getattr(vec_cfg, "embedding_model", None) or "text-embedding-3-small"
+    embeddings = OpenAIEmbeddings(
+        model=embedding_model,
+        base_url=base_url,
+        api_key=api_key,  # type: ignore[arg-type]
+    )
+    wrapped_embeddings = LangchainEmbeddingsWrapper(embeddings)
+
+    return wrapped_llm, wrapped_embeddings
 
 
 def stub_evaluate(answers: Iterable[str], contexts: Iterable[list[str]]) -> RagasReport:

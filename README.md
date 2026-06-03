@@ -2,6 +2,31 @@
 
 > LangGraph Multi-Agent · Hybrid RAG · QLoRA-distilled analyst (vLLM-served) · Multimodal vision · LangSmith observable
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Bloomberg%20Terminal-E5C46B?style=for-the-badge&logo=streamlit&logoColor=black)](https://github.com/Vivianmxmf/invest_forge)
+[![Tests](https://img.shields.io/badge/tests-226%20passed%20%2F%202%20skipped-26C281?style=for-the-badge&logo=pytest&logoColor=white)](#testing-validation)
+[![RAGAS](https://img.shields.io/badge/RAGAS-1.00%20%2F%201.00%20%2F%201.00-26C281?style=for-the-badge)](#w3--ragas-evaluation)
+[![Sharpe](https://img.shields.io/badge/Sharpe-+0.97-26C281?style=for-the-badge)](#w4--alphalens-backtest)
+[![LoRA](https://img.shields.io/badge/LoRA-+3.3pp%20acc%20%2F%20−29%25%20MAE-635bff?style=for-the-badge&logo=huggingface&logoColor=white)](#w2--qlora-distillation)
+[![Python](https://img.shields.io/badge/python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](#)
+
+---
+
+## ✨ Live UI Preview
+
+<p align="center">
+  <img src="docs/screenshots/ui_terminal_decision.png" alt="InvestForge Bloomberg Terminal — Decision view" width="100%">
+  <br><sub><b>Decision view</b> — 54px mono BUY/HOLD/SELL hero · 4 KPIs · 2×2 cell-panel grid (thesis / fundamentals / RAG / backtest snapshot)</sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/ui_terminal_landing.png" alt="InvestForge — first-visit guided tour" width="100%">
+  <br><sub><b>First-time guided tour</b> — 5-step welcome card · pre-warmed cache for 5 A-share sample tickers · instant Watchlist clicks</sub>
+</p>
+
+> **Run it locally:** `LLM_PROVIDER=fake python -m streamlit run frontend/app.py` → open `http://localhost:8501`
+>
+> Bloomberg-terminal aesthetic (JetBrains Mono + amber accent), 5-tab F-key navigation, codex-audited (3 rounds), WCAG-AA contrast verified.
+
 InvestForge is the capstone project of the *AI 主观投研* sprint
 ([`../JD6_AI主观投研实习生_AI_Agent方向.md`](../JD6_AI主观投研实习生_AI_Agent方向.md)).
 Input a stock ticker → the system pulls fundamentals + macro + news, runs a

@@ -104,6 +104,14 @@ body, p, div, span { color:var(--text); }
 .if-dot.off { background:var(--muted); }
 .if-time { margin-left:auto; padding:11px 18px; color:var(--amber);
            font-weight:600; letter-spacing:1px; }
+/* GitHub "View source" pill in the status bar */
+a.if-cell.if-src { text-decoration:none; color:var(--text); cursor:pointer;
+                   transition:.15s ease; }
+a.if-cell.if-src:hover { background:var(--amber); color:#000 !important; }
+a.if-cell.if-src:hover b { color:#000 !important; }
+a.if-cell.if-src .if-icon { color:var(--amber); margin-right:6px;
+                            font-weight:700; }
+a.if-cell.if-src:hover .if-icon { color:#000; }
 
 /* ── Sidebar — Bloomberg command panel ── */
 [data-testid="stSidebar"] {
@@ -374,11 +382,45 @@ body, p, div, span { color:var(--text); }
 
 /* ── Empty state ── */
 .if-empty {
-  padding:60px 40px; text-align:center; color:var(--muted);
+  padding:60px 40px; text-align:center; color:var(--dim);
   border:1px dashed var(--border); margin:30px;
 }
 .if-empty .blink { color:var(--amber); animation:blink 1.2s steps(2) infinite; }
 @keyframes blink { 50% { opacity:0; } }
+
+/* ── 5-step first-visit tour card ── */
+.if-tour { text-align:left; max-width:820px; margin:30px auto;
+           padding:36px 44px; background:linear-gradient(180deg,#0f1620,transparent); }
+.if-tour-title { font-size:26px; color:var(--amber); letter-spacing:5px;
+                 text-align:center; font-weight:700;
+                 text-shadow:0 0 12px rgba(229,196,107,.25); }
+.if-tour-sub { font-size:11px; color:var(--muted); letter-spacing:4px;
+               text-align:center; margin-top:6px;
+               text-transform:uppercase; }
+.if-tour-list { margin:32px 0 24px; padding:0; counter-reset:tour;
+                list-style:none; }
+.if-tour-list li {
+  position:relative; padding:14px 14px 14px 60px; margin:0 0 10px;
+  background:rgba(255,255,255,.025); border:1px solid var(--border);
+  border-left:2px solid var(--amber); border-radius:3px;
+  font-size:12.5px; color:var(--text); line-height:1.7;
+  counter-increment:tour;
+}
+.if-tour-list li::before {
+  content:counter(tour); position:absolute; left:14px; top:50%;
+  transform:translateY(-50%);
+  width:32px; height:32px; border-radius:50%;
+  background:rgba(229,196,107,.1); border:1.5px solid var(--amber);
+  color:var(--amber); font-weight:700; font-size:14px;
+  display:grid; place-items:center;
+  font-family:"JetBrains Mono",monospace;
+}
+.if-tour-list b { color:var(--amber); font-weight:600; }
+.if-tour-list code { background:#000; color:var(--buy); padding:1px 6px;
+                     border-radius:2px; font-size:11.5px;
+                     border:1px solid var(--border); }
+.if-tour-foot { text-align:center; margin-top:18px; color:var(--dim);
+                font-size:13px; letter-spacing:2.5px; text-transform:uppercase; }
 
 /* ── Footer ASCII bar ── */
 .if-footer {
@@ -436,6 +478,18 @@ def _build_deps() -> GraphDeps:
 _DEPS = _build_deps()
 _SETTINGS = get_settings()
 
+GITHUB_URL = "https://github.com/Vivianmxmf/invest_forge"
+
+
+@st.cache_data(show_spinner=False, max_entries=16, ttl=3600)
+def _pipeline_cached_no_image(ts_code: str) -> dict:
+    """Memoized pipeline call WITHOUT image input.
+
+    Re-clicking the same ticker is instant; the first click for any ticker
+    takes the cold path. Image-present runs bypass this cache (see trigger).
+    """
+    return run_pipeline_inline(_DEPS, ts_code=ts_code, input_images=None)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Top status bar
@@ -456,11 +510,38 @@ st.markdown(
   <div class="if-cell"><span class="if-dot ok"></span>SENTIMENT <b>{_DEPS.sentiment.name}</b></div>
   <div class="if-cell"><span class="if-dot {_v_state}"></span>VISION <b>{_v_label}</b></div>
   <div class="if-cell">SESSION <b>WJH 2026-06</b></div>
+  <a class="if-cell if-src" href="{GITHUB_URL}" target="_blank" rel="noopener">
+    <span class="if-icon">⌥</span>VIEW&nbsp;SOURCE&nbsp;<b>GitHub</b>
+  </a>
   <div class="if-time">{_now}</div>
 </div>
 """,
     unsafe_allow_html=True,
 )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# One-time cache preheat (5 sample tickers warm before user clicks anything)
+# ─────────────────────────────────────────────────────────────────────────────
+if "preheated" not in st.session_state:
+    _ph = st.empty()
+    with _ph.container():
+        with st.spinner("PRE-HEATING PIPELINE CACHE FOR 5 SAMPLE TICKERS…"):
+            for _code, _, _, _ in [
+                ("600519.SH", "贵州茅台", "+1.42", "up"),
+                ("688981.SH", "中芯国际", "-0.87", "down"),
+                ("300750.SZ", "宁德时代", "+2.31", "up"),
+                ("600276.SH", "恒瑞医药", "+0.55", "up"),
+                ("601398.SH", "工商银行", "+0.04", "flat"),
+            ]:
+                try:
+                    _pipeline_cached_no_image(_code)
+                except Exception:
+                    # Preheat is best-effort: skip a ticker that fails (e.g. KB
+                    # mismatch) rather than blocking the UI from loading.
+                    pass
+        st.session_state.preheated = True
+    _ph.empty()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -592,18 +673,22 @@ if go and st.session_state.ticker.strip():
         st.warning("PIPELINE ABORTED — FIX IMAGES OR REMOVE THEM, THEN RE-EXECUTE.")
     else:
         deps = _DEPS
-        if deps.vision_client is None and data_urls and _SETTINGS.llm.provider == "fake":
-            deps = dataclasses.replace(deps, vision_client=deps.llm)
-            st.info("VLM NOT CONFIGURED — USING FAKE CLIENT FOR DEMO")
-
-        with st.spinner(f"EXECUTING PIPELINE · {st.session_state.ticker.upper()}"):
-            state = run_pipeline_inline(
-                deps,
-                ts_code=st.session_state.ticker.strip(),
-                input_images=data_urls or None,
-            )
+        ticker_clean = st.session_state.ticker.strip()
+        if data_urls:
+            # Image-present run bypasses the no-image cache so each upload
+            # actually goes through the VLM path.
+            if deps.vision_client is None and _SETTINGS.llm.provider == "fake":
+                deps = dataclasses.replace(deps, vision_client=deps.llm)
+                st.info("VLM NOT CONFIGURED — USING FAKE CLIENT FOR DEMO")
+            with st.spinner(f"EXECUTING PIPELINE · {ticker_clean.upper()}"):
+                state = run_pipeline_inline(deps, ts_code=ticker_clean, input_images=data_urls)
+        else:
+            # No images → hit the @st.cache_data memoized path. Sample tickers
+            # have been pre-warmed at startup, so this is instant for them.
+            with st.spinner(f"EXECUTING PIPELINE · {ticker_clean.upper()}"):
+                state = _pipeline_cached_no_image(ticker_clean)
         st.session_state.last_state = state
-        st.session_state.last_ticker = st.session_state.ticker.strip()
+        st.session_state.last_ticker = ticker_clean
         st.session_state.last_thumbs = uploaded_files if data_urls else None
 
 
@@ -746,15 +831,32 @@ with TAB_DEC:
     state = st.session_state.get("last_state")
     fresh = _is_fresh(state)
     if not state:
+        # 5-step first-visit guided tour (replaces minimal empty state)
         st.markdown(
-            '<div class="if-empty">'
-            '<div style="font-size:24px;color:var(--amber);letter-spacing:4px;">'
-            'INVESTFORGE TERMINAL READY</div>'
-            '<div style="margin-top:14px;color:var(--dim);">'
-            'INPUT TICKER IN SIDEBAR <span class="blink">▮</span></div>'
-            '<div style="margin-top:24px;color:var(--muted);font-size:11px;letter-spacing:2px;">'
-            '[ESC] CLEAR · [F1] HELP · [F8] EXPORT</div>'
-            '</div>', unsafe_allow_html=True,
+            '<div class="if-empty if-tour">'
+            '  <div class="if-tour-title">INVESTFORGE TERMINAL READY</div>'
+            '  <div class="if-tour-sub">FIRST-TIME GUIDE · 5 STEPS</div>'
+            '  <ol class="if-tour-list">'
+            '    <li><b>SELECT</b> a ticker from the <b>WATCHLIST</b> in the left sidebar — '
+            '        5 A-share names are <b>pre-warmed</b>, so the pipeline returns instantly.</li>'
+            '    <li><b>(OPTIONAL) UPLOAD</b> a research-report or chart image '
+            '        below the watchlist — the VLM node will analyze it.</li>'
+            '    <li><b>HIT</b> the amber <b>▶ EXECUTE PIPELINE</b> button. The graph runs '
+            '        <code>data_fetcher → researcher → vision → analyst → risk_control</code> '
+            '        with a conditional revision loop.</li>'
+            '    <li><b>READ</b> your hero decision card here — <code>BUY / HOLD / SELL</code> + target price '
+            '        + confidence + risk level + revision-loop count.</li>'
+            '    <li><b>DRILL DOWN</b> via the top tabs — '
+            '        <code>[2] RESEARCH</code> for the full memo + RAG citations · '
+            '        <code>[3] RISK</code> for compliance JSON · '
+            '        <code>[4] BACKTEST</code> for quant performance · '
+            '        <code>[5] SYSTEM</code> for stack &amp; timeline.</li>'
+            '  </ol>'
+            '  <div class="if-tour-foot">'
+            '    INPUT TICKER IN SIDEBAR <span class="blink">▮</span>'
+            '  </div>'
+            '</div>',
+            unsafe_allow_html=True,
         )
     elif not fresh:
         _render_stale_empty("[1] DECISION")

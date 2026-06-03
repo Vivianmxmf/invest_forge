@@ -93,3 +93,6 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Local UI backup — kept on disk for 1-line rollback, not shipped
+frontend/app_legacy.py

@@ -2,7 +2,7 @@
 
 > LangGraph Multi-Agent · Hybrid RAG · QLoRA-distilled analyst (vLLM-served) · Multimodal vision · LangSmith observable
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Bloomberg%20Terminal-E5C46B?style=for-the-badge&logo=streamlit&logoColor=black)](https://github.com/Vivianmxmf/invest_forge)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-invest--forge.streamlit.app-E5C46B?style=for-the-badge&logo=streamlit&logoColor=black)](https://invest-forge.streamlit.app)
 [![Tests](https://img.shields.io/badge/tests-226%20passed%20%2F%202%20skipped-26C281?style=for-the-badge&logo=pytest&logoColor=white)](#testing-validation)
 [![RAGAS](https://img.shields.io/badge/RAGAS-1.00%20%2F%201.00%20%2F%201.00-26C281?style=for-the-badge)](#w3--ragas-evaluation)
 [![Sharpe](https://img.shields.io/badge/Sharpe-+0.97-26C281?style=for-the-badge)](#w4--alphalens-backtest)
@@ -23,7 +23,9 @@
   <br><sub><b>First-time guided tour</b> — 5-step welcome card · pre-warmed cache for 5 A-share sample tickers · instant Watchlist clicks</sub>
 </p>
 
-> **Run it locally:** `LLM_PROVIDER=fake python -m streamlit run frontend/app.py` → open `http://localhost:8501`
+> **Try it live:** [`invest-forge.streamlit.app`](https://invest-forge.streamlit.app) (no setup, no API key)
+> &nbsp; · &nbsp; **Run it locally:** `LLM_PROVIDER=fake python -m streamlit run frontend/app.py` → `localhost:8501`
+> &nbsp; · &nbsp; **Deploy your own:** see [`docs/DEPLOY_STREAMLIT_CLOUD.md`](docs/DEPLOY_STREAMLIT_CLOUD.md)
 >
 > Bloomberg-terminal aesthetic (JetBrains Mono + amber accent), 5-tab F-key navigation, codex-audited (3 rounds), WCAG-AA contrast verified.
 

@@ -1,0 +1,26 @@
+# InvestForge — Streamlit Cloud theme (Bloomberg Terminal palette)
+#
+# Tokens here are the SAME hex values the app's custom CSS targets; setting
+# them at the framework level avoids the brief light-theme flash before our
+# CSS overrides land.
+
+[theme]
+base = "dark"
+primaryColor = "#E5C46B"            # amber accent
+backgroundColor = "#0a0e14"         # deep-space body
+secondaryBackgroundColor = "#0f1620" # panel / sidebar
+textColor = "#e8ecf1"
+font = "monospace"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+maxUploadSize = 8                   # MB — matches ImagePolicy.max_bytes default
+headless = true
+
+[client]
+showErrorDetails = true             # surfaces tracebacks for cloud debugging
+
+[runner]
+fastReruns = true

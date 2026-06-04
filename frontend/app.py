@@ -529,12 +529,15 @@ def _pipeline_cached_no_image(ts_code: str) -> dict:
 
 
 @st.cache_data(show_spinner=False, max_entries=8, ttl=3600)
-def _kline_panel(ts_code: str, lookback: int = 90):
-    """Load OHLC slice for one ticker from the sample prices.csv.
+def _kline_panel(ts_code: str, lookback: int = 120):
+    """Load OHLCV slice for one ticker from the sample prices.csv.
 
-    Returns a DataFrame indexed by date with columns [open, high, low, close]
-    so plotly Candlestick can render it directly. Empty DataFrame when the
-    ticker isn't in the sample (gracefully degrades — no candle is drawn).
+    Returns a DataFrame indexed by date with columns [open, high, low, close,
+    volume] so plotly Candlestick + Bar can render OHLC + volume sub-panel.
+    Empty DataFrame when the ticker isn't in the sample.
+
+    Lookback is 120 sessions so MA20 has full warm-up before the visible
+    90-session window (cropped at render time).
     """
     import pandas as pd
     p = _SETTINGS.paths.sample_dir / "prices.csv"
@@ -548,15 +551,23 @@ def _kline_panel(ts_code: str, lookback: int = 90):
     sub = sub.dropna(subset=["trade_date"]).sort_values("trade_date").tail(lookback)
     sub = sub.set_index("trade_date")
     cols_lower = {c.lower(): c for c in sub.columns}
-    keep = {k: cols_lower[k] for k in ("open", "high", "low", "close") if k in cols_lower}
-    if len(keep) < 4:
+    needed = ("open", "high", "low", "close", "volume")
+    keep = {k: cols_lower[k] for k in needed if k in cols_lower}
+    if len([k for k in keep if k in ("open", "high", "low", "close")]) < 4:
         return pd.DataFrame()
     return sub[list(keep.values())].rename(columns={v: k for k, v in keep.items()})
 
 
-def _render_candlestick(ts_code: str, *, height: int = 220) -> None:
-    """Render a tight Bloomberg-styled plotly Candlestick for one ticker."""
+def _render_candlestick(ts_code: str, *, height: int = 320) -> None:
+    """Render a Bloomberg-styled K-line with MA5/10/20 overlay + volume sub-panel.
+
+    Layout: 72 % top panel = candlestick + three MA lines (amber/cyan/violet),
+    28 % bottom panel = colored volume bars (green when close>=open, red else).
+    Shared x-axis; range slider disabled; transparent bg blends with Bloomberg
+    cell-panel container.
+    """
     import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
     df = _kline_panel(ts_code)
     if df.empty:
         st.markdown(
@@ -565,24 +576,230 @@ def _render_candlestick(ts_code: str, *, height: int = 220) -> None:
             unsafe_allow_html=True,
         )
         return
-    fig = go.Figure(
-        data=[go.Candlestick(
-            x=df.index, open=df["open"], high=df["high"], low=df["low"], close=df["close"],
-            increasing_line_color="#26C281", increasing_fillcolor="#26C281",
-            decreasing_line_color="#E63946", decreasing_fillcolor="#E63946",
-            line=dict(width=1), showlegend=False,
-        )]
+
+    # Compute MA on full lookback then crop the visible window so the lines are warm.
+    has_volume = "volume" in df.columns
+    df = df.copy()
+    df["ma5"]  = df["close"].rolling(5,  min_periods=1).mean()
+    df["ma10"] = df["close"].rolling(10, min_periods=1).mean()
+    df["ma20"] = df["close"].rolling(20, min_periods=1).mean()
+    visible = df.tail(90)  # crop tail to keep chart density readable
+
+    fig = make_subplots(
+        rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.02,
+        row_heights=[0.72, 0.28] if has_volume else [1.0, 0.0],
     )
+    # ── Candlestick + MA overlay (row 1) ──
+    fig.add_trace(go.Candlestick(
+        x=visible.index, open=visible["open"], high=visible["high"],
+        low=visible["low"], close=visible["close"],
+        increasing_line_color="#26C281", increasing_fillcolor="#26C281",
+        decreasing_line_color="#E63946", decreasing_fillcolor="#E63946",
+        line=dict(width=1), showlegend=False, name="OHLC",
+    ), row=1, col=1)
+    for name, color in (("ma5", "#E5C46B"), ("ma10", "#5fb1ff"), ("ma20", "#a78bfa")):
+        fig.add_trace(go.Scatter(
+            x=visible.index, y=visible[name], mode="lines",
+            line=dict(color=color, width=1.4), name=name.upper(),
+            hovertemplate="%{y:.2f}<extra>" + name.upper() + "</extra>",
+        ), row=1, col=1)
+
+    # ── Volume bars (row 2) ──
+    if has_volume:
+        vol_colors = [
+            "#26C281" if c >= o else "#E63946"
+            for c, o in zip(visible["close"], visible["open"])
+        ]
+        fig.add_trace(go.Bar(
+            x=visible.index, y=visible["volume"],
+            marker_color=vol_colors, marker_line_width=0,
+            showlegend=False, name="VOL",
+        ), row=2, col=1)
+
     fig.update_layout(
-        height=height, margin=dict(l=0, r=0, t=4, b=0),
+        height=height, margin=dict(l=4, r=4, t=10, b=4),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(rangeslider=dict(visible=False), showgrid=False,
-                   tickfont=dict(color="#7e8a9c", size=9, family="JetBrains Mono")),
-        yaxis=dict(showgrid=True, gridcolor="#2a3445", zeroline=False,
-                   tickfont=dict(color="#7e8a9c", size=9, family="JetBrains Mono")),
         font=dict(family="JetBrains Mono"),
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
+            font=dict(color="#a8b3c4", size=10), bgcolor="rgba(0,0,0,0)",
+        ),
+        hovermode="x unified",
+        hoverlabel=dict(bgcolor="#0a0e14", font_color="#e8ecf1",
+                        font_family="JetBrains Mono"),
+    )
+    fig.update_xaxes(
+        rangeslider=dict(visible=False), showgrid=False,
+        tickfont=dict(color="#7e8a9c", size=9, family="JetBrains Mono"),
+        row=1, col=1,
+    )
+    fig.update_xaxes(
+        rangeslider=dict(visible=False), showgrid=False,
+        tickfont=dict(color="#7e8a9c", size=9, family="JetBrains Mono"),
+        row=2, col=1,
+    )
+    fig.update_yaxes(
+        showgrid=True, gridcolor="#2a3445", zeroline=False,
+        tickfont=dict(color="#7e8a9c", size=9, family="JetBrains Mono"),
+        row=1, col=1,
+    )
+    fig.update_yaxes(
+        showgrid=False, zeroline=False,
+        tickfont=dict(color="#7e8a9c", size=8, family="JetBrains Mono"),
+        row=2, col=1, tickformat=".2s",
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PDF research-report export — reportlab with Adobe CID font (CJK-ready,
+# no TTF file required, works on Streamlit Cloud out-of-the-box).
+# ─────────────────────────────────────────────────────────────────────────────
+def _pdf_report(state: dict, ts_code: str) -> bytes:
+    """Render the latest pipeline state as a one-page PDF research note."""
+    from io import BytesIO
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+
+    # Register Adobe's built-in Simplified-Chinese font once per process.
+    try:
+        pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+        cjk_font = "STSong-Light"
+    except Exception:
+        cjk_font = "Helvetica"
+
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    width, height = A4
+
+    rec = state.get("final_recommendation", {}) or {}
+    rating_raw = str(rec.get("rating", "HOLD")).strip().upper()
+    rating = rating_raw if rating_raw in ("BUY", "HOLD", "SELL") else "HOLD"
+    conf = float(rec.get("confidence", 0) or 0)
+    target = rec.get("target_price")
+    iters = int(rec.get("iteration_count", 0) or 0)
+    risk_lvl = str(rec.get("risk_level", "—"))
+    rationale = str(rec.get("rationale", ""))
+    risks = rec.get("risk_factors", []) or []
+    risk_color = {"BUY": (0.15, 0.76, 0.50), "HOLD": (0.98, 0.66, 0.14),
+                  "SELL": (0.90, 0.22, 0.27)}[rating]
+
+    # ── Header band ──
+    c.setFillColorRGB(0.04, 0.06, 0.08); c.rect(0, height - 70, width, 70, fill=1, stroke=0)
+    c.setFillColorRGB(0.90, 0.77, 0.42); c.setFont("Helvetica-Bold", 18)
+    c.drawString(40, height - 38, "InvestForge")
+    c.setFillColorRGB(0.66, 0.70, 0.77); c.setFont("Helvetica", 10)
+    c.drawString(40, height - 56, "AI INVESTMENT RESEARCH NOTE")
+    c.setFont("Helvetica", 9)
+    c.drawRightString(width - 40, height - 38,
+                      f"REPORT · {ts_code}  ·  WJH  ·  invest-forge.streamlit.app")
+
+    # ── Rating badge ──
+    y = height - 130
+    c.setFillColorRGB(*risk_color); c.setStrokeColorRGB(*risk_color); c.setLineWidth(1.5)
+    c.roundRect(40, y, 110, 50, 8, fill=1, stroke=1)
+    c.setFillColorRGB(0, 0, 0); c.setFont("Helvetica-Bold", 26)
+    c.drawCentredString(95, y + 16, rating)
+
+    # ── KPI row ──
+    c.setFillColorRGB(0.55, 0.61, 0.71); c.setFont("Helvetica", 8)
+    target_v = f"¥{float(target):,.2f}" if target is not None else "—"
+    kpi = [("TARGET", target_v), ("CONFIDENCE", f"{conf:.0%}"),
+           ("RISK LEVEL", risk_lvl), ("REVISION", f"{iters}x")]
+    kx = 180
+    for label, val in kpi:
+        c.setFillColorRGB(0.55, 0.61, 0.71); c.setFont("Helvetica", 7.5)
+        c.drawString(kx, y + 36, label)
+        c.setFillColorRGB(0.91, 0.93, 0.95); c.setFont("Helvetica-Bold", 14)
+        c.drawString(kx, y + 18, val)
+        kx += 95
+
+    # ── Thesis section ──
+    y -= 32
+    _section(c, "CORE THESIS · ANALYST AGENT", 40, y, width - 80)
+    y -= 18
+    c.setFillColorRGB(0.85, 0.87, 0.91); c.setFont(cjk_font, 10)
+    y = _wrap_text(c, rationale, 40, y, width - 80, line_h=14, font=cjk_font, size=10)
+
+    # ── Risk factors ──
+    if risks:
+        y -= 18
+        _section(c, "RISK FACTORS", 40, y, width - 80)
+        y -= 16
+        chip_x = 40
+        for r in risks:
+            txt = str(r)
+            tw = c.stringWidth(txt, cjk_font, 9) + 14
+            if chip_x + tw > width - 40:
+                chip_x = 40; y -= 18
+            c.setFillColorRGB(0.93, 0.71, 0.74); c.setStrokeColorRGB(0.79, 0.39, 0.43)
+            c.roundRect(chip_x, y - 3, tw, 14, 7, fill=0, stroke=1)
+            c.setFont(cjk_font, 9)
+            c.drawString(chip_x + 7, y, txt)
+            chip_x += tw + 6
+
+    # ── RAG evidence (top 5) ──
+    hits = state.get("rag_evidence", []) or []
+    if hits:
+        y -= 24
+        _section(c, f"RAG EVIDENCE  ·  TOP-{min(5, len(hits))}", 40, y, width - 80)
+        y -= 14
+        for h in hits[:5]:
+            src = (h.get("source") if isinstance(h, dict) else getattr(h, "source", "")) or ""
+            score = (h.get("score") if isinstance(h, dict) else getattr(h, "score", 0.0)) or 0.0
+            text = (h.get("text") if isinstance(h, dict) else getattr(h, "text", "")) or ""
+            c.setFillColorRGB(0.90, 0.77, 0.42); c.setFont("Helvetica-Bold", 8)
+            c.drawString(40, y, f"[{str(src)[:70]}]  ({float(score):.3f})")
+            y -= 12
+            c.setFillColorRGB(0.66, 0.70, 0.77); c.setFont(cjk_font, 9)
+            y = _wrap_text(c, str(text)[:260], 40, y, width - 80,
+                           line_h=12, font=cjk_font, size=9)
+            y -= 6
+            if y < 80:
+                break
+
+    # ── Footer ──
+    c.setFillColorRGB(0.36, 0.40, 0.46); c.setFont("Helvetica", 7)
+    c.drawString(40, 30,
+                 "Generated by InvestForge — multi-agent · hybrid RAG · LoRA-distilled analyst")
+    c.drawRightString(width - 40, 30,
+                      "github.com/Vivianmxmf/invest_forge  ·  v0.4.1")
+
+    c.showPage(); c.save()
+    return buf.getvalue()
+
+
+def _section(c, label: str, x: float, y: float, w: float) -> None:
+    """Draw a gold section header rule."""
+    c.setFillColorRGB(0.90, 0.77, 0.42); c.setFont("Helvetica-Bold", 9)
+    c.drawString(x, y, label)
+    c.setStrokeColorRGB(0.16, 0.20, 0.27); c.setLineWidth(0.5)
+    c.line(x, y - 3, x + w, y - 3)
+
+
+def _wrap_text(c, text: str, x: float, y: float, w: float, *,
+               line_h: float = 12, font: str = "Helvetica", size: int = 9) -> float:
+    """Tiny word/char-wrap helper that respects PDF width and returns next-y."""
+    if not text:
+        return y
+    c.setFont(font, size)
+    # CJK-friendly: wrap by character; Latin stays readable too.
+    line = ""
+    for ch in text:
+        if c.stringWidth(line + ch, font, size) > w:
+            c.drawString(x, y, line)
+            y -= line_h
+            line = ch
+            if y < 60:
+                return y
+        else:
+            line += ch
+    if line:
+        c.drawString(x, y, line)
+        y -= line_h
+    return y
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1113,7 +1330,23 @@ with TAB_DEC:
         # Render the candlestick into the 4th cell-panel slot above.
         # (Streamlit's component model writes after the HTML block, but the
         #  Bloomberg grid keeps the chart inside the same visual quadrant.)
-        _render_candlestick(st.session_state.get("last_ticker", ""), height=220)
+        _ticker_now = st.session_state.get("last_ticker", "")
+        _render_candlestick(_ticker_now, height=340)
+
+        # ── PDF export ──
+        try:
+            _pdf_bytes = _pdf_report(state, _ticker_now)
+            dl_col, _ = st.columns([1, 4])
+            with dl_col:
+                st.download_button(
+                    label="📄 EXPORT PDF",
+                    data=_pdf_bytes,
+                    file_name=f"InvestForge_{_ticker_now}_{rec.get('rating','HOLD')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
+        except Exception as _exc:
+            st.warning(f"PDF export unavailable: {_exc}")
 
         thumbs = st.session_state.get("last_thumbs")
         if thumbs:

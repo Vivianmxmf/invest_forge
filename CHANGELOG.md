@@ -1,6 +1,43 @@
 # Changelog
 
-All version-level changes to InvestForge are documented here.
+All version-level changes to **JANUS** (Python package: `invest_forge`) are documented here.
+
+## [0.5.0] - 2026-06-04
+
+### Rebrand
+- Project renamed **InvestForge → JANUS** (the two-faced Roman god, looking at past
+  data + future forecast — matches our data_fetcher + analyst duality).
+- Python package keeps the internal name `invest_forge` for import stability
+  (226 tests, 100+ imports across `frontend/` and `scripts/`).
+- All user-facing strings updated: page title, status bar brand (`⌖ JANUS · IF<GO>`),
+  PDF report header, OG/Twitter meta cards, footer ASCII strip, 5-step tour title.
+- New brand glyph **⌖** (target/two-faced aim) replaces ◆ in the brand mark.
+
+### Features (same release)
+- **K-line** with MA5 / MA10 / MA20 overlay + colored volume sub-panel (plotly).
+- **[5] COMPARE** tab — pairwise BUY/HOLD/SELL hero side-by-side + dual K-line + VERDICT.
+- **📄 PDF report export** — reportlab + Adobe CID font (CJK-ready), one-page A4
+  with rating badge + KPIs + thesis + risk chips + RAG citations.
+- **Watchlist persistence** via URL query params (`?w=...`) — shareable as a single link.
+- **Mobile-responsive** layout: tablet (≤980 px) and phone (≤640 px) media queries,
+  sidebar auto-collapse, tabs horizontal scroll, hero/grid stack vertically.
+- **OpenGraph + Twitter meta** injected at app boot for Slack/Discord unfurls.
+- **Coverage badge** (75%) added to README.
+
+### Design Rationale
+- Why JANUS: short, mythic, Bloomberg-codename feel, perfectly matches our
+  past-data + future-prediction duality. Also nods to Janus Henderson Investors
+  (signal we're in the same arena as real institutional asset managers).
+- Why keep `invest_forge` Python package: rename would touch 100+ imports + 226
+  tests; not worth the regression risk for an internal name no user sees.
+- Why ⌖ glyph: aiming-reticle symbolism — two-faced god aims at past AND future
+  targets simultaneously.
+
+### Notes & Caveats
+- Streamlit Cloud URL `invest-forge.streamlit.app` preserved for backward
+  compatibility; no CV-link breakage.
+
+---
 
 ---
 

@@ -1,8 +1,12 @@
-# InvestForge — AI 主观投研助手
+# ⌖ JANUS — The Two-Faced AI Investment Terminal
 
+> _Looking at the past (fundamentals + RAG history) and the future (analyst forecast + target price) — like the Roman god._
+>
 > LangGraph Multi-Agent · Hybrid RAG · QLoRA-distilled analyst (vLLM-served) · Multimodal vision · LangSmith observable
+>
+> <sub>Codename inside the codebase: `invest_forge` (Python package, kept for import stability)</sub>
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-invest--forge.streamlit.app-E5C46B?style=for-the-badge&logo=streamlit&logoColor=black)](https://invest-forge.streamlit.app)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-JANUS%20Terminal-E5C46B?style=for-the-badge&logo=streamlit&logoColor=black)](https://invest-forge.streamlit.app)
 [![Tests](https://img.shields.io/badge/tests-226%20passed%20%2F%202%20skipped-26C281?style=for-the-badge&logo=pytest&logoColor=white)](#testing-validation)
 [![Coverage](https://img.shields.io/badge/coverage-75%25-26C281?style=for-the-badge&logo=codecov&logoColor=white)](#testing-validation)
 [![RAGAS](https://img.shields.io/badge/RAGAS-1.00%20%2F%201.00%20%2F%201.00-26C281?style=for-the-badge)](#w3--ragas-evaluation)
@@ -15,27 +19,28 @@
 ## ✨ Live UI Preview
 
 <p align="center">
-  <img src="docs/screenshots/ui_terminal_decision.png" alt="InvestForge Bloomberg Terminal — Decision view" width="100%">
-  <br><sub><b>Decision view</b> — 54px mono BUY/HOLD/SELL hero · 4 KPIs · 2×2 cell-panel grid (thesis / fundamentals / RAG / backtest snapshot) · <i>captured live from <a href="https://invest-forge.streamlit.app">invest-forge.streamlit.app</a></i></sub>
+  <img src="docs/screenshots/ui_terminal_decision.png" alt="JANUS Bloomberg Terminal — Decision view" width="100%">
+  <br><sub><b>Decision view</b> — 54px mono BUY/HOLD/SELL hero · 4 KPIs · 2×2 cell-panel grid (thesis / fundamentals / RAG / K-line snapshot) · <i>captured live from <a href="https://invest-forge.streamlit.app">invest-forge.streamlit.app</a></i></sub>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/ui_terminal_landing.png" alt="InvestForge — first-visit guided tour" width="100%">
+  <img src="docs/screenshots/ui_terminal_landing.png" alt="JANUS — first-visit guided tour" width="100%">
   <br><sub><b>First-time guided tour</b> — 5-step welcome card · pre-warmed cache for 5 A-share sample tickers · instant Watchlist clicks · <i>captured live from <a href="https://invest-forge.streamlit.app">invest-forge.streamlit.app</a></i></sub>
 </p>
 
-> **Try it live:** [`invest-forge.streamlit.app`](https://invest-forge.streamlit.app) (no setup, no API key)
+> **Try JANUS live:** [`invest-forge.streamlit.app`](https://invest-forge.streamlit.app) (no setup, no API key)
 > &nbsp; · &nbsp; **Run it locally:** `LLM_PROVIDER=fake python -m streamlit run frontend/app.py` → `localhost:8501`
 > &nbsp; · &nbsp; **Deploy your own:** see [`docs/DEPLOY_STREAMLIT_CLOUD.md`](docs/DEPLOY_STREAMLIT_CLOUD.md)
 >
-> Bloomberg-terminal aesthetic (JetBrains Mono + amber accent), 5-tab F-key navigation, codex-audited (3 rounds), WCAG-AA contrast verified.
+> Bloomberg-terminal aesthetic (JetBrains Mono + amber accent), 6-tab F-key navigation, K-line + MA + volume sub-panel, pairwise COMPARE, PDF report export, mobile-responsive — codex-audited (3 rounds), WCAG-AA contrast verified.
 
-InvestForge is the capstone project of the *AI 主观投研* sprint
+JANUS is the capstone project of the *AI 主观投研* sprint
 ([`../JD6_AI主观投研实习生_AI_Agent方向.md`](../JD6_AI主观投研实习生_AI_Agent方向.md)).
 Input a stock ticker → the system pulls fundamentals + macro + news, runs a
-researcher → analyst → risk-control multi-agent pipeline with conditional
-revision loops, and outputs a structured investment recommendation
-(BUY / HOLD / SELL + confidence + logic + risk factors).
+data_fetcher → researcher → vision → analyst → risk_control multi-agent
+pipeline with conditional revision loops, and outputs a structured
+investment recommendation (BUY / HOLD / SELL + confidence + logic +
+risk factors + target price).
 
 ---
 
@@ -232,7 +237,7 @@ trace prints the offending PID) or just dodge to a free card + port as above.
 
 ## Multimodal vision (report / chart images)
 
-InvestForge can analyse research-report screenshots, K-line charts, and
+JANUS can analyse research-report screenshots, K-line charts, and
 financial diagrams by routing them through a dedicated vision VLM
 (`Qwen/Qwen2.5-VL-7B-Instruct`) served at a separate vLLM endpoint.
 

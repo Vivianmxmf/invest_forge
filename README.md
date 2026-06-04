@@ -25,14 +25,24 @@
 
 <p align="center">
   <img src="docs/screenshots/ui_terminal_landing.png" alt="JANUS — first-visit guided tour" width="100%">
-  <br><sub><b>First-time guided tour</b> — 5-step welcome card · pre-warmed cache for 5 A-share sample tickers · instant Watchlist clicks · <i>captured live from <a href="https://invest-forge.streamlit.app">invest-forge.streamlit.app</a></i></sub>
+  <br><sub><b>First-time guided tour</b> — 5-step welcome card · pre-warmed cache for 5 A-share sample tickers · live ticker tape under the status bar · <i>captured from <a href="https://invest-forge.streamlit.app">invest-forge.streamlit.app</a></i></sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/ui_terminal_screen.png" alt="JANUS — [6] SCREEN batch ticker analyzer" width="100%">
+  <br><sub><b>[6] SCREEN — batch ticker analyzer</b> · concurrent <code>ThreadPoolExecutor(max_workers=8)</code> over 6 prefab universes (白酒 / 半导体 / 新能源 / 医药 / 银行 + custom paste) · ranks BUY → HOLD → SELL by confidence · CSV export</sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/ui_terminal_trace.png" alt="JANUS — [7] TRACE observability flamegraph" width="100%">
+  <br><sub><b>[7] TRACE — observability flamegraph</b> · per-node Gantt (cyan=data · violet=LLM · amber=conditional) · click any node to inspect its live state slice · honest caveat: structure REAL, timings ESTIMATED (set <code>USE_LANGGRAPH=true + LANGCHAIN_API_KEY</code> for exact LangSmith)</sub>
 </p>
 
 > **Try JANUS live:** [`invest-forge.streamlit.app`](https://invest-forge.streamlit.app) (no setup, no API key)
 > &nbsp; · &nbsp; **Run it locally:** `LLM_PROVIDER=fake python -m streamlit run frontend/app.py` → `localhost:8501`
 > &nbsp; · &nbsp; **Deploy your own:** see [`docs/DEPLOY_STREAMLIT_CLOUD.md`](docs/DEPLOY_STREAMLIT_CLOUD.md)
 >
-> Bloomberg-terminal aesthetic (JetBrains Mono + amber accent), 6-tab F-key navigation, K-line + MA + volume sub-panel, pairwise COMPARE, PDF report export, mobile-responsive — codex-audited (3 rounds), WCAG-AA contrast verified.
+> Bloomberg-terminal aesthetic (JetBrains Mono + amber accent), 8-tab F-key navigation, K-line + MA + volume sub-panel, streaming K-line (3 s fragment), pairwise COMPARE, batch SCREEN with concurrent pipelines, AB-test mode, observability TRACE, PDF report export, watchlist URL persistence, SHARE QR, mobile-responsive — codex-audited (3 rounds), WCAG-AA contrast verified.
 
 JANUS is the capstone project of the *AI 主观投研* sprint
 ([`../JD6_AI主观投研实习生_AI_Agent方向.md`](../JD6_AI主观投研实习生_AI_Agent方向.md)).

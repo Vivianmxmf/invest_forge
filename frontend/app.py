@@ -49,7 +49,9 @@ st.set_page_config(
     page_title="INVESTFORGE · IF<GO>",
     page_icon="🔨",
     layout="wide",
-    initial_sidebar_state="expanded",
+    # "auto" → Streamlit collapses the sidebar on narrow viewports (mobile),
+    # keeps it expanded on desktop. Critical for mobile-responsive UX.
+    initial_sidebar_state="auto",
     menu_items={"About": "InvestForge — Bloomberg-style AI investment terminal."},
 )
 
@@ -472,6 +474,88 @@ a.if-cell.if-src:hover .if-icon { color:#000; }
 .if-pl-row .ms { color:var(--buy); font-variant-numeric:tabular-nums; }
 .if-pl-row .ms.skip { color:var(--muted); }
 .if-pl-row .ms.amber { color:var(--amber); }
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Responsive layout — tablet (≤ 980 px) + phone (≤ 640 px)
+ * Streamlit auto-collapses the sidebar at narrow widths; the rules below
+ * fix the BLOOMBERG-style fixed grids that would otherwise overflow.
+ * ───────────────────────────────────────────────────────────────────────*/
+@media (max-width: 980px) {
+  /* Status bar: collapse to wrap + reduce padding */
+  .if-statusbar { flex-wrap:wrap; }
+  .if-brand { font-size:11px; padding:8px 12px; letter-spacing:1px; }
+  .if-cell  { padding:6px 10px; font-size:10px; }
+  .if-time  { padding:6px 12px; font-size:10px; }
+
+  /* Hero grid: 5-column → 2-column wrap, badge becomes its own row */
+  .if-hero { padding:18px 16px; }
+  .if-hero-grid {
+    grid-template-columns:1fr 1fr; gap:14px;
+  }
+  .if-rating { font-size:42px; padding:10px 18px; letter-spacing:2px; }
+  .if-kpi-v  { font-size:22px; }
+  .if-kpi-l  { font-size:9px; letter-spacing:1.5px; }
+
+  /* 2x2 cell grid → single column on tablet */
+  .if-grid2 { grid-template-columns:1fr; }
+  .if-cell-panel {
+    border-right:0 !important;
+    border-bottom:1px solid var(--border);
+    min-height:0; padding:14px 16px;
+  }
+
+  /* Table: tighter padding */
+  .if-tbl td, .if-tbl th { padding:5px 6px; font-size:11px; }
+
+  /* Compare tab: side-by-side → stack */
+  .if-cmp-col { padding:16px; }
+  .if-cmp-kpi-row { grid-template-columns:repeat(2, 1fr); gap:10px; }
+  .if-cmp-kpi-row .if-kpi-v { font-size:16px; }
+
+  /* Tab labels: drop the F-key prefix at narrow widths via shorter label */
+  .stTabs [data-baseweb="tab"] {
+    padding:8px 12px !important; font-size:10px !important;
+    letter-spacing:1px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Phone tier: tighter still */
+  .if-brand::before { content:"" !important; }
+  .if-brand { font-size:10px; letter-spacing:.5px; padding:6px 10px; }
+  .if-cell  { padding:5px 8px; font-size:9px; }
+  .if-cell b { display:none; }       /* hide secondary values, save row width */
+  .if-time  { padding:5px 8px; font-size:9px; }
+
+  /* Hero: full-stack */
+  .if-hero-grid { grid-template-columns:1fr; gap:10px; }
+  .if-rating { font-size:36px; padding:8px 14px; letter-spacing:1.5px; }
+  .if-kpi-v  { font-size:18px; }
+
+  /* Section header rule */
+  .if-cell-h { font-size:9px; letter-spacing:1.5px; }
+
+  /* Tour card: shrink padding */
+  .if-tour { padding:24px 18px; margin:14px auto; }
+  .if-tour-title { font-size:18px; letter-spacing:2px; }
+  .if-tour-list li {
+    padding:10px 10px 10px 50px; font-size:11.5px; line-height:1.55;
+  }
+  .if-tour-list li::before { left:10px; width:26px; height:26px; font-size:11px; }
+
+  /* Tabs: stack into a horizontal scroll strip */
+  .stTabs [data-baseweb="tab-list"] { overflow-x:auto; }
+  .stTabs [data-baseweb="tab"] {
+    padding:7px 10px !important; font-size:9.5px !important;
+    flex-shrink:0;
+  }
+
+  /* Footer scales down */
+  .if-footer { font-size:8px; letter-spacing:1.2px; padding:6px 10px; }
+
+  /* Status pill row VIEW SOURCE: keep only the icon at phone width */
+  a.if-cell.if-src { padding:5px 8px; }
+}
 </style>
 """
 st.markdown(_CSS, unsafe_allow_html=True)

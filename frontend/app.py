@@ -115,6 +115,40 @@ body, p, div, span { color:var(--text); }
 .if-dot.off { background:var(--muted); }
 .if-time { margin-left:auto; padding:11px 18px; color:var(--amber);
            font-weight:600; letter-spacing:1px; }
+
+/* ── Ticker tape (horizontally-scrolling marquee under status bar) ── */
+.if-tape {
+  background:#070b10; border-bottom:1px solid var(--border);
+  overflow:hidden; white-space:nowrap; padding:6px 0;
+  position:relative;
+}
+.if-tape::before, .if-tape::after {
+  content:""; position:absolute; top:0; bottom:0; width:60px; z-index:2;
+  pointer-events:none;
+}
+.if-tape::before { left:0;  background:linear-gradient(90deg,#070b10,transparent); }
+.if-tape::after  { right:0; background:linear-gradient(-90deg,#070b10,transparent); }
+.if-tape-inner {
+  display:inline-block; animation:tapeScroll 80s linear infinite;
+  will-change:transform;
+}
+@keyframes tapeScroll {
+  from { transform:translateX(0); }
+  to   { transform:translateX(-50%); }
+}
+.tt-item {
+  display:inline-flex; align-items:center; gap:8px;
+  padding:0 18px; border-right:1px solid var(--border);
+  font-size:11.5px; letter-spacing:.5px;
+}
+.tt-code { color:var(--amber); font-weight:700; }
+.tt-name { color:var(--dim); font-size:10.5px; }
+.tt-px   { color:var(--text); font-weight:600;
+           font-variant-numeric:tabular-nums; }
+.tt-chg  { font-weight:700; font-variant-numeric:tabular-nums;
+           padding:1px 6px; border-radius:2px; font-size:10.5px; }
+.tt-chg.up   { color:var(--buy);  background:rgba(38,194,129,.08); }
+.tt-chg.down { color:var(--sell); background:rgba(230,57,70,.08); }
 /* GitHub "View source" pill in the status bar */
 a.if-cell.if-src { text-decoration:none; color:var(--text); cursor:pointer;
                    transition:.15s ease; }
@@ -624,6 +658,168 @@ def _pipeline_cached_no_image(ts_code: str) -> dict:
     return run_pipeline_inline(_DEPS, ts_code=ts_code, input_images=None)
 
 
+CLOUD_BASE_URL = "https://invest-forge.streamlit.app"
+RATING_FAVICONS = {
+    "BUY":  "https://raw.githubusercontent.com/Vivianmxmf/invest_forge/main/assets/janus_favicon_buy.png",
+    "HOLD": "https://raw.githubusercontent.com/Vivianmxmf/invest_forge/main/assets/janus_favicon_hold.png",
+    "SELL": "https://raw.githubusercontent.com/Vivianmxmf/invest_forge/main/assets/janus_favicon_sell.png",
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ① Real-time ticker tape — simulated quotes from sample close + jitter
+# ─────────────────────────────────────────────────────────────────────────────
+@st.cache_data(show_spinner=False, ttl=30)
+def _simulated_quotes(seed: int = 0) -> list[dict]:
+    """Generate a fresh batch of simulated A-share quotes every 30 s.
+
+    Reads the latest available close from data/sample/prices.csv per ticker
+    and adds a small ±1.5 % random jitter so the tape "ticks". Deterministic
+    per-seed so tests are reproducible. NOT a real market feed.
+    """
+    import pandas as pd
+    import random
+    p = _SETTINGS.paths.sample_dir / "prices.csv"
+    if not p.exists():
+        return []
+    df = pd.read_csv(p)
+    rng = random.Random(seed)
+    out: list[dict] = []
+    for code, name in [(t[0], t[1]) for t in [
+        ("600519.SH", "贵州茅台"), ("688981.SH", "中芯国际"),
+        ("300750.SZ", "宁德时代"), ("600276.SH", "恒瑞医药"),
+        ("601398.SH", "工商银行"),
+    ]]:
+        sub = df[df["ts_code"] == code]
+        if sub.empty:
+            continue
+        last_close = float(sub.tail(1)["close"].iloc[0])
+        # Jitter: simulate intraday move
+        change_pct = rng.uniform(-1.5, 1.5)
+        price = last_close * (1 + change_pct / 100)
+        out.append({
+            "code": code, "name": name, "price": price,
+            "change_pct": change_pct,
+            "direction": "up" if change_pct >= 0 else "down",
+        })
+    return out
+
+
+def _render_ticker_tape() -> None:
+    """Bloomberg-style horizontally-scrolling tape under the status bar."""
+    # Refresh tape every 30 s. _simulated_quotes is cache-keyed on the seed
+    # so passing a different seed each tick invalidates the cache entry.
+    try:
+        from streamlit_autorefresh import st_autorefresh
+        tick = st_autorefresh(interval=30_000, key="ticker_tape_refresh")
+    except Exception:
+        tick = 0
+    quotes = _simulated_quotes(seed=int(tick) % 100)
+    if not quotes:
+        return
+    # Build one rendering inline; the CSS marquee duplicates it for an
+    # infinite-scroll illusion without JS.
+    spans = []
+    for q in quotes:
+        dir_cls = q["direction"]
+        sign = "+" if q["change_pct"] >= 0 else ""
+        spans.append(
+            f'<span class="tt-item">'
+            f'<span class="tt-code">{_esc(q["code"])}</span>'
+            f'<span class="tt-name">{_esc(q["name"])}</span>'
+            f'<span class="tt-px tabular-nums">¥{q["price"]:,.2f}</span>'
+            f'<span class="tt-chg {dir_cls} tabular-nums">{sign}{q["change_pct"]:.2f}%</span>'
+            f'</span>'
+        )
+    # Duplicate the strip so the CSS keyframe seamlessly loops.
+    strip = "".join(spans) + "".join(spans)
+    st.markdown(
+        f'<div class="if-tape"><div class="if-tape-inner">{strip}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ② Favicon-on-tab notification — swap browser tab icon by rating
+# ─────────────────────────────────────────────────────────────────────────────
+def _set_favicon_for_rating(rating: str) -> None:
+    """Replace the OUTER-page <link rel*="icon"> with a rating-colored variant.
+
+    Uses streamlit.components.v1.html (a 0-height iframe) — st.markdown strips
+    <script> tags. The iframe is same-origin so window.parent.document is
+    reachable; the loop climbs up to 5 parents to handle Cloud's nested
+    iframe shell.
+    """
+    url = RATING_FAVICONS.get(str(rating).upper())
+    if not url:
+        return
+    from streamlit.components.v1 import html as _components_html
+    _components_html(
+        f"""
+<script>
+(function() {{
+  try {{
+    let w = window;
+    for (let i = 0; i < 5 && w.parent && w.parent !== w; i++) w = w.parent;
+    const doc = w.document;
+    if (!doc || !doc.head) return;
+    const ourUrl = "{url}?t=" + Date.now();
+    const apply = () => {{
+      // Remove every existing icon-family link so the browser can't fall
+      // back to a Streamlit-served default that React re-renders.
+      doc.querySelectorAll('link[rel*="icon"]').forEach(l => l.remove());
+      // Append a fresh shortcut icon at the END of head — last write wins.
+      const link = doc.createElement('link');
+      link.rel = 'shortcut icon';
+      link.type = 'image/png';
+      link.href = ourUrl;
+      doc.head.appendChild(link);
+      const apple = doc.createElement('link');
+      apple.rel = 'apple-touch-icon';
+      apple.href = ourUrl;
+      doc.head.appendChild(apple);
+    }};
+    apply();
+    // Re-apply a few times to outlast Streamlit's React re-render of <head>.
+    [300, 800, 1500].forEach(ms => setTimeout(apply, ms));
+  }} catch (e) {{ /* cross-origin / detached — silently no-op */ }}
+}})();
+</script>
+""",
+        height=0,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ③ Share QR code — encodes ticker + watchlist + tab into a single URL
+# ─────────────────────────────────────────────────────────────────────────────
+@st.cache_data(show_spinner=False, max_entries=32, ttl=600)
+def _make_qr_png(url: str) -> bytes:
+    """Render a Bloomberg-amber QR code on dark bg as PNG bytes."""
+    from io import BytesIO
+    import qrcode
+    qr = qrcode.QRCode(
+        version=None, error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=8, border=2,
+    )
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="#E5C46B", back_color="#0a0e14")
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _build_share_url(ts_code: str) -> str:
+    """Compose a shareable URL with ticker + custom watchlist embedded."""
+    from urllib.parse import urlencode
+    params = {"ticker": ts_code}
+    custom = st.session_state.get("custom_tickers") or []
+    if custom:
+        params["w"] = ",".join(custom)
+    return f"{CLOUD_BASE_URL}/?{urlencode(params)}"
+
+
 @st.cache_data(show_spinner=False, max_entries=8, ttl=3600)
 def _kline_panel(ts_code: str, lookback: int = 120):
     """Load OHLCV slice for one ticker from the sample prices.csv.
@@ -926,6 +1122,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# ── Ticker tape (simulated quotes, 30 s auto-refresh) ────────────────────────
+_render_ticker_tape()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # One-time cache preheat (5 sample tickers warm before user clicks anything)
@@ -984,7 +1183,9 @@ if "custom_tickers" not in st.session_state:
     st.session_state.custom_tickers = _load_custom_tickers()
 
 if "ticker" not in st.session_state:
-    st.session_state.ticker = "600519.SH"
+    # Honour ?ticker=600519.SH query param so QR-share links auto-fill.
+    qp_ticker = st.query_params.get("ticker", "")
+    st.session_state.ticker = (qp_ticker or "600519.SH").strip().upper()
 
 if "ticker_b" not in st.session_state:
     st.session_state.ticker_b = "688981.SH"
@@ -1167,6 +1368,9 @@ if go and st.session_state.ticker.strip():
         st.session_state.last_state = state
         st.session_state.last_ticker = ticker_clean
         st.session_state.last_thumbs = uploaded_files if data_urls else None
+        # Swap the browser tab favicon to BUY-green / HOLD-amber / SELL-red.
+        _rating = (state.get("final_recommendation") or {}).get("rating", "HOLD")
+        _set_favicon_for_rating(_rating)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1429,11 +1633,11 @@ with TAB_DEC:
         _ticker_now = st.session_state.get("last_ticker", "")
         _render_candlestick(_ticker_now, height=340)
 
-        # ── PDF export ──
+        # ── PDF export + SHARE QR row ──
         try:
             _pdf_bytes = _pdf_report(state, _ticker_now)
-            dl_col, _ = st.columns([1, 4])
-            with dl_col:
+            pdf_col, qr_col, _ = st.columns([1, 1, 3])
+            with pdf_col:
                 st.download_button(
                     label="📄 EXPORT PDF",
                     data=_pdf_bytes,
@@ -1441,8 +1645,33 @@ with TAB_DEC:
                     mime="application/pdf",
                     use_container_width=True,
                 )
+            with qr_col:
+                _show_qr = st.toggle("📱 SHARE", value=False, key="share_qr_toggle",
+                                     help="Show a scannable QR — opens this exact "
+                                          "analysis on a phone with ticker + watchlist auto-filled.")
         except Exception as _exc:
             st.warning(f"PDF export unavailable: {_exc}")
+            _show_qr = False
+
+        if _show_qr:
+            _share_url = _build_share_url(_ticker_now)
+            try:
+                _qr_png = _make_qr_png(_share_url)
+                qcol1, qcol2 = st.columns([1, 3])
+                with qcol1:
+                    st.image(_qr_png, width=200)
+                with qcol2:
+                    st.markdown(
+                        '<div class="if-cell-h">SHARE THIS ANALYSIS</div>'
+                        '<div style="color:var(--dim);font-size:12px;line-height:1.7;">'
+                        'Scan with a phone camera to open this exact ticker + custom '
+                        'watchlist on the live demo. Embeds <code>?ticker=…&amp;w=…</code> '
+                        'so the recipient lands on the same BUY/HOLD/SELL view.</div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.code(_share_url, language=None)
+            except Exception as _qexc:
+                st.warning(f"QR unavailable: {_qexc}")
 
         thumbs = st.session_state.get("last_thumbs")
         if thumbs:

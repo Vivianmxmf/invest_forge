@@ -51,6 +51,8 @@ streamlit>=1.30,<2.0
 plotly>=5.18,<7.0
 matplotlib>=3.8,<4.0
 reportlab>=4.0,<5.0  # PDF research-report export (uses Adobe CID font, CJK-ready, no TTF needed)
+qrcode[pil]>=7.4,<9.0  # Shareable analysis QR codes (DECISION tab "SHARE THIS" expander)
+streamlit-autorefresh>=1.0  # 30 s tick-tape refresh in status bar
 
 # --- Multimodal image-input validation (CPU-only, light) ---
 Pillow>=10.0,<12.0

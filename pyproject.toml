@@ -13,8 +13,8 @@ authors = [{ name = "Vivianmxmf" }]
 keywords = ["langgraph", "rag", "investment-research", "ai-agent", "multi-agent"]
 
 [project.urls]
-Homepage = "https://github.com/Vivianmxmf/invest_forge"
-Repository = "https://github.com/Vivianmxmf/invest_forge"
+Homepage = "https://github.com/Vivianmxmf/janus-terminal"
+Repository = "https://github.com/Vivianmxmf/janus-terminal"
 
 [tool.setuptools.packages.find]
 where = ["."]

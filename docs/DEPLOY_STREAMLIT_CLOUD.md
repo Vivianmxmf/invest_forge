@@ -27,13 +27,13 @@ the public demo to work. Real-model paths (`local` / `openai`) are env-gated.
 ### 1 · Sign in
 - Open <https://share.streamlit.io>
 - **"Continue with GitHub"** → authorize Streamlit's GitHub app on
-  `Vivianmxmf/invest_forge`.
+  `Vivianmxmf/janus-terminal`.
 
 ### 2 · "New app" wizard
 
 | Field | Value |
 |---|---|
-| **Repository** | `Vivianmxmf/invest_forge` |
+| **Repository** | `Vivianmxmf/janus-terminal` |
 | **Branch** | `main` |
 | **Main file path** | `frontend/app.py` |
 | **App URL (subdomain)** | `invest-forge` &nbsp;⇒&nbsp; final URL = `invest-forge.streamlit.app` |

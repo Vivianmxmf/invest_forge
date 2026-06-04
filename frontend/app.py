@@ -833,6 +833,165 @@ def _build_share_url(ts_code: str) -> str:
     return f"{CLOUD_BASE_URL}/?{urlencode(params)}"
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ④ Batch ticker screener — concurrent pipelines via ThreadPoolExecutor
+# ─────────────────────────────────────────────────────────────────────────────
+SCREEN_UNIVERSES = {
+    "全部 sample (5)": ["600519.SH", "688981.SH", "300750.SZ",
+                       "600276.SH", "601398.SH"],
+    "白酒 (sample)":    ["600519.SH"],
+    "半导体 (sample)":  ["688981.SH"],
+    "新能源 (sample)":  ["300750.SZ"],
+    "医药 (sample)":    ["600276.SH"],
+    "银行 (sample)":    ["601398.SH"],
+}
+
+
+def _batch_run_pipelines(tickers: list[str], max_workers: int = 8) -> dict[str, dict]:
+    """Run _pipeline_cached_no_image concurrently for many tickers.
+
+    Honors the @st.cache_data cache, so re-runs of the same ticker are
+    instant. Returns {ticker: state} dict. Tickers that error map to
+    None so the caller can still render a row.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    out: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = {ex.submit(_pipeline_cached_no_image, t): t for t in tickers}
+        for f in as_completed(futures):
+            ts = futures[f]
+            try:
+                out[ts] = f.result()
+            except Exception:
+                out[ts] = None  # type: ignore[assignment]
+    # Preserve user input order
+    return {t: out.get(t) for t in tickers}
+
+
+def _screen_summary_df(results: dict[str, dict]):
+    """Reduce batch results to a sortable summary DataFrame."""
+    import pandas as pd
+    rows = []
+    for ts, st_ in results.items():
+        rec = ((st_ or {}).get("final_recommendation") or {})
+        target = rec.get("target_price")
+        conf = float(rec.get("confidence", 0) or 0)
+        rows.append({
+            "TICKER":     ts,
+            "RATING":     str(rec.get("rating") or "—"),
+            "CONFIDENCE": conf,
+            "TARGET":     float(target) if target is not None else None,
+            "RISK":       str(rec.get("risk_level") or "—"),
+            "ITER":       int(rec.get("iteration_count") or 0),
+        })
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        # Sort: BUY first, then by confidence desc
+        order = {"BUY": 0, "HOLD": 1, "SELL": 2, "—": 3}
+        df["_rk"] = df["RATING"].map(order).fillna(3)
+        df = df.sort_values(["_rk", "CONFIDENCE"], ascending=[True, False]).drop(columns=["_rk"])
+    return df.reset_index(drop=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ⑤ TRACE — capture per-node timings + render Bloomberg flamegraph
+# ─────────────────────────────────────────────────────────────────────────────
+# Node cost profile (fake-LLM mode, measured order of magnitude). Real-LLM
+# runs scale these 10-100×; we stamp the dominant LLM nodes with a 1.5×
+# random multiplier to give the trace some realistic variance.
+_NODE_BASE_MS = {
+    "data_fetcher": (60,  20,  "data"),
+    "researcher":   (40,  15,  "llm"),
+    "vision":       (60,  20,  "llm"),
+    "analyst":      (50,  20,  "llm"),
+    "risk_control": (30,  10,  "conditional"),
+}
+
+
+def _capture_trace(state: dict, ts_code: str) -> dict:
+    """Synthesise a per-node execution trace from the final ``state``.
+
+    The structure (which nodes ran, revision-loop count) is REAL — read
+    from the state the pipeline emitted. The per-node ``duration_ms``
+    is ESTIMATED from the node cost profile + a deterministic seed so
+    repeated renders are consistent. UI labels this honestly.
+    """
+    import random
+    rng = random.Random(hash((ts_code, state.get("ts_code", ""))) & 0xFFFFFFFF)
+    rec = state.get("final_recommendation") or {}
+    iters = int(rec.get("iteration_count") or 1)
+    vision_ran = bool(state.get("vision_analysis"))
+    ran_nodes = ["data_fetcher", "researcher"]
+    if vision_ran:
+        ran_nodes.append("vision")
+    ran_nodes.append("analyst")
+    ran_nodes.append("risk_control")
+    if iters > 1:
+        ran_nodes.append("analyst (revised)")
+        ran_nodes.append("risk_control (revised)")
+
+    spans = []
+    t = 0
+    llm_calls = 0
+    for name in ran_nodes:
+        key = name.replace(" (revised)", "")
+        base, jitter, kind = _NODE_BASE_MS.get(key, (40, 10, "data"))
+        dur = max(5, int(base + rng.uniform(-jitter, jitter * 2)))
+        spans.append({
+            "name": name, "kind": kind,
+            "start_ms": t, "end_ms": t + dur, "duration_ms": dur,
+        })
+        if kind == "llm":
+            llm_calls += 1
+        t += dur
+
+    return {
+        "ts_code": ts_code,
+        "spans": spans,
+        "total_ms": t,
+        "llm_calls": llm_calls,
+        "revision_loop_count": iters,
+        "vision_used": vision_ran,
+    }
+
+
+def _render_trace_flamegraph(trace: dict, *, height: int = 280) -> None:
+    """Render the trace as a horizontal Gantt-style plotly bar chart."""
+    import plotly.graph_objects as go
+    spans = trace.get("spans", [])
+    if not spans:
+        st.markdown(
+            '<div style="color:var(--muted);font-size:11px;letter-spacing:1px;'
+            'padding:8px 0;">no trace — execute a pipeline first</div>',
+            unsafe_allow_html=True,
+        )
+        return
+    color_by_kind = {"data": "#22d3ee", "llm": "#a78bfa", "conditional": "#E5C46B"}
+    names = [s["name"] for s in spans][::-1]
+    starts = [s["start_ms"] for s in spans][::-1]
+    durs   = [s["duration_ms"] for s in spans][::-1]
+    colors = [color_by_kind.get(s["kind"], "#a8b3c4") for s in spans][::-1]
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=durs, y=names, base=starts, orientation="h",
+        marker=dict(color=colors, line=dict(width=0)),
+        hovertemplate="<b>%{y}</b><br>start: %{base} ms<br>dur: %{x} ms<extra></extra>",
+        text=[f"{d} ms" for d in durs], textposition="outside",
+        textfont=dict(family="JetBrains Mono", size=10, color="#a8b3c4"),
+        showlegend=False,
+    ))
+    fig.update_layout(
+        height=height, margin=dict(l=8, r=8, t=10, b=4),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="JetBrains Mono"),
+        xaxis=dict(showgrid=True, gridcolor="#2a3445",
+                   tickfont=dict(color="#7e8a9c", size=9), title="ms"),
+        yaxis=dict(showgrid=False, tickfont=dict(color="#a8b3c4", size=10),
+                   automargin=True),
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+
 @st.cache_data(show_spinner=False, max_entries=8, ttl=3600)
 def _kline_panel(ts_code: str, lookback: int = 120):
     """Load OHLCV slice for one ticker from the sample prices.csv.
@@ -1343,9 +1502,10 @@ with st.sidebar:
 # ─────────────────────────────────────────────────────────────────────────────
 # Tab navigation
 # ─────────────────────────────────────────────────────────────────────────────
-TAB_DEC, TAB_RES, TAB_RISK, TAB_BT, TAB_CMP, TAB_SYS = st.tabs(
+(TAB_DEC, TAB_RES, TAB_RISK, TAB_BT, TAB_CMP,
+ TAB_SCR, TAB_TRC, TAB_SYS) = st.tabs(
     ["[1]  DECISION", "[2]  RESEARCH", "[3]  RISK", "[4]  BACKTEST",
-     "[5]  COMPARE", "[6]  SYSTEM"]
+     "[5]  COMPARE", "[6]  SCREEN", "[7]  TRACE", "[8]  SYSTEM"]
 )
 
 
@@ -1947,13 +2107,14 @@ with TAB_BT:
             ab_b_top = st.slider("TOP-N B",      1, 2,  2, 1, key="ab_b_n")
         run_ab = st.button("▶ RUN AB-TEST", type="primary",
                             use_container_width=True, key="run_ab")
+        # Persist AB results in session_state so autorefresh / fragment reruns
+        # don't wipe the output.
         if run_ab:
             try:
                 import pandas as pd
                 with st.spinner("RUNNING BOTH VARIANTS …"):
                     bt_a, eq_a, panel = _run_one_backtest(ab_a_win, ab_a_top)
                     bt_b, eq_b, _     = _run_one_backtest(ab_b_win, ab_b_top)
-                # Winner
                 a_label = f"A · MA{ab_a_win}/N{ab_a_top}"
                 b_label = f"B · MA{ab_b_win}/N{ab_b_top}"
                 if bt_a.sharpe > bt_b.sharpe:
@@ -1962,7 +2123,6 @@ with TAB_BT:
                     winner = b_label; w_sharpe = bt_b.sharpe
                 else:
                     winner = "TIE"; w_sharpe = bt_a.sharpe
-                # Comparison table
                 cmp_df = pd.DataFrame({
                     "METRIC":    ["IC Mean","IC IR","Annualised","Sharpe","Max DD","N obs"],
                     a_label:     [f"{bt_a.ic_mean:+.4f}", f"{bt_a.ic_ir:+.4f}",
@@ -1972,29 +2132,37 @@ with TAB_BT:
                                   f"{bt_b.annualised_return:+.2%}", f"{bt_b.sharpe:+.3f}",
                                   f"{bt_b.max_drawdown:+.2%}", str(bt_b.n_obs)],
                 })
-                st.markdown(
-                    f'<div style="padding:18px 22px 6px;"><div class="if-cell-h">'
-                    f'VERDICT</div><div style="color:var(--amber);font-size:16px;'
-                    f'letter-spacing:2px;font-weight:700;">▶ WINNER · {_esc(winner)}'
-                    f'  ·  Sharpe {w_sharpe:+.3f}</div></div>',
-                    unsafe_allow_html=True,
-                )
-                st.markdown('<div style="padding:14px 22px 4px;"><div class="if-cell-h">'
-                            'METRIC COMPARISON</div></div>', unsafe_allow_html=True)
-                st.dataframe(cmp_df, hide_index=True, use_container_width=True)
-                # Combined equity chart
-                st.markdown('<div style="padding:14px 22px 6px;"><div class="if-cell-h">'
-                            'DUAL EQUITY CURVES</div></div>', unsafe_allow_html=True)
                 combined = pd.concat([eq_a.rename(a_label), eq_b.rename(b_label)], axis=1)
-                st.line_chart(combined, height=320)
-                st.markdown(
-                    f'<div style="padding:0 22px 18px;color:var(--muted);'
-                    f'font-size:11px;letter-spacing:1px;">'
-                    f'UNIVERSE: {", ".join(panel.columns.tolist())} · '
-                    f'RANGE: {panel.index[0].date()} → {panel.index[-1].date()}'
-                    f'</div>', unsafe_allow_html=True)
+                st.session_state["ab_result"] = {
+                    "cmp_df": cmp_df, "combined_eq": combined,
+                    "winner": winner, "w_sharpe": w_sharpe,
+                    "universe": ", ".join(panel.columns.tolist()),
+                    "range": f"{panel.index[0].date()} → {panel.index[-1].date()}",
+                }
             except Exception as exc:
                 st.error(f"AB-TEST ERROR: {exc}")
+                st.session_state.pop("ab_result", None)
+
+        ab_state = st.session_state.get("ab_result")
+        if ab_state:
+            st.markdown(
+                f'<div style="padding:18px 22px 6px;"><div class="if-cell-h">'
+                f'VERDICT</div><div style="color:var(--amber);font-size:16px;'
+                f'letter-spacing:2px;font-weight:700;">▶ WINNER · {_esc(ab_state["winner"])}'
+                f'  ·  Sharpe {ab_state["w_sharpe"]:+.3f}</div></div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown('<div style="padding:14px 22px 4px;"><div class="if-cell-h">'
+                        'METRIC COMPARISON</div></div>', unsafe_allow_html=True)
+            st.dataframe(ab_state["cmp_df"], hide_index=True, use_container_width=True)
+            st.markdown('<div style="padding:14px 22px 6px;"><div class="if-cell-h">'
+                        'DUAL EQUITY CURVES</div></div>', unsafe_allow_html=True)
+            st.line_chart(ab_state["combined_eq"], height=320)
+            st.markdown(
+                f'<div style="padding:0 22px 18px;color:var(--muted);'
+                f'font-size:11px;letter-spacing:1px;">'
+                f'UNIVERSE: {_esc(ab_state["universe"])} · RANGE: {_esc(ab_state["range"])}'
+                f'</div>', unsafe_allow_html=True)
         else:
             st.markdown(
                 '<div class="if-empty">▼ PICK PARAMS FOR A AND B · ▶ RUN AB-TEST</div>',
@@ -2105,6 +2273,179 @@ with TAB_CMP:
             'BOTH PIPELINES RUN IN PARALLEL · CACHED RESULTS WHEN AVAILABLE</div>'
             '</div>', unsafe_allow_html=True,
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tab — [6] SCREEN (batch ticker analyzer with concurrent pipelines)
+# ─────────────────────────────────────────────────────────────────────────────
+with TAB_SCR:
+    st.markdown(
+        '<div style="padding:18px 22px 4px;"><div class="if-cell-h">'
+        'BATCH SCREENER · CONCURRENT PIPELINES · RANK BY CONVICTION</div>'
+        '<div style="color:var(--muted);font-size:11px;letter-spacing:1px;">'
+        'Runs ``ThreadPoolExecutor(max_workers=8)`` over an arbitrary basket. '
+        'Same lookahead-safe pipeline; results sorted BUY → HOLD → SELL by confidence desc.'
+        '</div></div>', unsafe_allow_html=True,
+    )
+
+    scr_top1, scr_top2, scr_top3 = st.columns([2, 2, 1])
+    with scr_top1:
+        chosen_universe = st.selectbox(
+            "PREFAB UNIVERSE",
+            list(SCREEN_UNIVERSES.keys()), index=0,
+            help="Pick a sample basket OR ignore this and paste tickers below.",
+        )
+    with scr_top2:
+        custom_tickers_raw = st.text_input(
+            "CUSTOM TICKERS (comma-separated, optional)",
+            placeholder="e.g. 600519.SH,688981.SH,000001.SZ",
+        )
+    with scr_top3:
+        st.write(""); st.write("")
+        run_scr = st.button("▶ BATCH ANALYZE", type="primary",
+                            use_container_width=True, key="run_screen")
+
+    # Batch is computed on click; results PERSIST in session_state so the
+    # ticker-tape autorefresh (whole-script rerun) doesn't wipe them.
+    if run_scr:
+        universe = list(SCREEN_UNIVERSES.get(chosen_universe, []))
+        custom_extra = [t.strip().upper() for t in (custom_tickers_raw or "").split(",") if t.strip()]
+        seen: dict[str, None] = {}
+        for t in universe + custom_extra:
+            seen[t] = None
+        targets = list(seen.keys())[:20]  # cap at 20 to keep cloud-free quick
+        if not targets:
+            st.error("NO TICKERS — pick a universe or paste custom codes.")
+        else:
+            import time
+            t0 = time.perf_counter()
+            with st.spinner(f"RUNNING {len(targets)} PIPELINES CONCURRENTLY …"):
+                results = _batch_run_pipelines(targets)
+            elapsed = (time.perf_counter() - t0) * 1000
+            df = _screen_summary_df(results)
+            st.session_state["screen_df"] = df
+            st.session_state["screen_elapsed_ms"] = elapsed
+            st.session_state["screen_n_targets"] = len(targets)
+
+    df = st.session_state.get("screen_df")
+    if df is not None and not df.empty:
+        elapsed  = float(st.session_state.get("screen_elapsed_ms", 0))
+        n_targets = int(st.session_state.get("screen_n_targets", len(df)))
+        n_buy  = int((df["RATING"] == "BUY").sum())
+        n_hold = int((df["RATING"] == "HOLD").sum())
+        n_sell = int((df["RATING"] == "SELL").sum())
+        # ── Summary metric row ──
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("TICKERS",      f"{n_targets}")
+        m2.metric("BUY / HOLD / SELL", f"{n_buy} / {n_hold} / {n_sell}")
+        m3.metric("WALL-CLOCK",   f"{elapsed:,.0f} ms")
+        m4.metric("PER TICKER",   f"{elapsed/max(n_targets,1):.0f} ms")
+
+        st.markdown('<div style="padding:14px 22px 4px;"><div class="if-cell-h">'
+                    'RANKED RESULTS · BUY-FIRST · BY CONFIDENCE</div></div>',
+                    unsafe_allow_html=True)
+        st.dataframe(
+            df, hide_index=True, use_container_width=True,
+            column_config={
+                "CONFIDENCE": st.column_config.ProgressColumn(
+                    "CONFIDENCE", format="%.0f%%",
+                    min_value=0, max_value=1,
+                ),
+                "TARGET": st.column_config.NumberColumn("TARGET", format="¥%.2f"),
+                "ITER":   st.column_config.NumberColumn("REV ×", format="%d"),
+            },
+        )
+        csv_bytes = df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "📊 EXPORT CSV", data=csv_bytes,
+            file_name=f"JANUS_screen_{n_targets}_tickers.csv",
+            mime="text/csv", use_container_width=False,
+        )
+    else:
+        st.markdown(
+            '<div class="if-empty">▼ PICK UNIVERSE OR PASTE TICKERS · ▶ BATCH ANALYZE</div>',
+            unsafe_allow_html=True,
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tab — [7] TRACE (self-built per-node flamegraph + cost estimate)
+# ─────────────────────────────────────────────────────────────────────────────
+with TAB_TRC:
+    state = st.session_state.get("last_state")
+    if not state:
+        st.markdown(
+            '<div class="if-empty">'
+            '<div style="font-size:18px;color:var(--amber);letter-spacing:3px;">'
+            '🔬 EXECUTION TRACE · OBSERVABILITY</div>'
+            '<div style="margin-top:14px;color:var(--dim);">'
+            'Execute a pipeline on the <b>DECISION</b> tab — the trace appears here.</div>'
+            '<div style="margin-top:18px;color:var(--muted);font-size:11px;letter-spacing:2px;">'
+            'STRUCTURE = REAL (from final state) · TIMINGS = ESTIMATED (fake-LLM mode)'
+            '</div></div>',
+            unsafe_allow_html=True,
+        )
+    elif not _is_fresh(state):
+        _render_stale_empty("[7] TRACE")
+    else:
+        trace = _capture_trace(state, st.session_state.get("last_ticker", ""))
+        # ── Summary row ──
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("WALL-CLOCK", f"{trace['total_ms']} ms")
+        m2.metric("LLM CALLS",  f"{trace['llm_calls']}×")
+        m3.metric("REVISION ×", f"{trace['revision_loop_count']}")
+        m4.metric("VISION USED", "YES" if trace["vision_used"] else "NO")
+        st.markdown(
+            '<div style="padding:8px 22px 14px;color:var(--muted);font-size:10.5px;'
+            'letter-spacing:1.5px;">STRUCTURE = REAL (read from final state) · '
+            'TIMINGS = ESTIMATED (deterministic seed per ticker, fake-LLM order-of-magnitude) · '
+            'switch to USE_LANGGRAPH=true + LANGCHAIN_API_KEY for exact LangSmith traces'
+            '</div>', unsafe_allow_html=True,
+        )
+
+        # ── Flamegraph ──
+        st.markdown('<div style="padding:0 22px 4px;"><div class="if-cell-h">'
+                    'PER-NODE EXECUTION GANTT · cyan=data · violet=LLM · amber=conditional'
+                    '</div></div>', unsafe_allow_html=True)
+        _render_trace_flamegraph(trace, height=max(220, 40 * len(trace["spans"])))
+
+        # ── Per-node details ──
+        st.markdown('<div style="padding:14px 22px 4px;"><div class="if-cell-h">'
+                    'NODE DETAILS · CLICK TO EXPAND</div></div>',
+                    unsafe_allow_html=True)
+        for span in trace["spans"]:
+            kind_color = {"data": "🟦", "llm": "🟪", "conditional": "🟨"}.get(span["kind"], "⬜")
+            with st.expander(f"{kind_color}  {span['name']}  ·  {span['duration_ms']} ms  ·  {span['kind']}"):
+                key = span["name"].replace(" (revised)", "")
+                # Show real per-node state slice when available
+                detail = {
+                    "data_fetcher": ("fundamental_data", "macro_context"),
+                    "researcher":   ("research_memo", "rag_evidence"),
+                    "vision":       ("vision_analysis",),
+                    "analyst":      ("analyst_report",),
+                    "risk_control": ("risk_assessment",),
+                }.get(key, ())
+                for f in detail:
+                    val = state.get(f)
+                    if val is None:
+                        continue
+                    if isinstance(val, str):
+                        st.markdown(
+                            f'<div style="color:var(--amber);font-size:11px;letter-spacing:1.5px;'
+                            f'text-transform:uppercase;margin-bottom:4px;">{_esc(f)}</div>'
+                            f'<div style="color:var(--text);font-size:12px;line-height:1.6;'
+                            f'white-space:pre-wrap;">{_esc(val[:600])}{"…" if len(val) > 600 else ""}</div>',
+                            unsafe_allow_html=True,
+                        )
+                    elif isinstance(val, list) and val:
+                        st.markdown(
+                            f'<div style="color:var(--amber);font-size:11px;letter-spacing:1.5px;'
+                            f'text-transform:uppercase;margin-bottom:4px;">{_esc(f)} · {len(val)} items</div>',
+                            unsafe_allow_html=True,
+                        )
+                        _render_json_block(val[:3], pad="0 0 6px")
+                    elif isinstance(val, dict):
+                        _render_json_block(val, pad="0 0 6px")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

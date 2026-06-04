@@ -3,8 +3,6 @@
 > _Looking at the past (fundamentals + RAG history) and the future (analyst forecast + target price) — like the Roman god._
 >
 > LangGraph Multi-Agent · Hybrid RAG · QLoRA-distilled analyst (vLLM-served) · Multimodal vision · LangSmith observable
->
-> <sub>Codename inside the codebase: `invest_forge` (Python package, kept for import stability)</sub>
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-JANUS%20Terminal-E5C46B?style=for-the-badge&logo=streamlit&logoColor=black)](https://invest-forge.streamlit.app)
 [![Tests](https://img.shields.io/badge/tests-226%20passed%20%2F%202%20skipped-26C281?style=for-the-badge&logo=pytest&logoColor=white)](#testing-validation)
@@ -42,10 +40,14 @@
 > &nbsp; · &nbsp; **Run it locally:** `LLM_PROVIDER=fake python -m streamlit run frontend/app.py` → `localhost:8501`
 > &nbsp; · &nbsp; **Deploy your own:** see [`docs/DEPLOY_STREAMLIT_CLOUD.md`](docs/DEPLOY_STREAMLIT_CLOUD.md)
 >
-> Bloomberg-terminal aesthetic (JetBrains Mono + amber accent), 8-tab F-key navigation, K-line + MA + volume sub-panel, streaming K-line (3 s fragment), pairwise COMPARE, batch SCREEN with concurrent pipelines, AB-test mode, observability TRACE, PDF report export, watchlist URL persistence, SHARE QR, mobile-responsive — codex-audited (3 rounds), WCAG-AA contrast verified.
+> **Highlights:**
+> - Bloomberg-terminal aesthetic — JetBrains Mono + amber accent, 8-tab F-key navigation
+> - **K-line** with MA overlay + volume sub-panel; **streaming K-line** (3 s fragment)
+> - **COMPARE** (pairwise), **SCREEN** (batch / concurrent pipelines), **AB-test mode**
+> - **TRACE** observability flamegraph, **PDF report export**, **SHARE QR**
+> - Watchlist URL persistence, mobile-responsive, WCAG-AA contrast verified
 
-JANUS is the capstone project of the *AI 主观投研* sprint
-([`../JD6_AI主观投研实习生_AI_Agent方向.md`](../JD6_AI主观投研实习生_AI_Agent方向.md)).
+JANUS implements a production-grade A-share research workflow.
 Input a stock ticker → the system pulls fundamentals + macro + news, runs a
 data_fetcher → researcher → vision → analyst → risk_control multi-agent
 pipeline with conditional revision loops, and outputs a structured
@@ -153,7 +155,7 @@ invest_forge/
 ├── data/sample/                   # synthetic 5-stock dataset (141 KB) — committed
 ├── tests/                         # 226 unit tests, network-free
 ├── docker-compose.yml             # qdrant + vllm + vllm-vision (for Docker hosts)
-├── requirements-gpu.txt           # cu121 GPU stack (driver 535 / CUDA 12.2)
+├── requirements-gpu.txt           # GPU dependencies (CUDA 12.x stack)
 ├── pyproject.toml · requirements.txt · Makefile
 └── README.md
 ```
@@ -171,15 +173,16 @@ The dashboard runs against ``LLM_PROVIDER=fake`` (deterministic canned
 responses) and reads the synthetic sample dataset.  Drop in real keys
 later by editing ``.env``.
 
-## Quick start — server (8× A5000 24G, CUDA 12.2)
+## Quick start — server (multi-GPU, CUDA 12.x)
 
-> **Hardware:** node1.athena — 8× NVIDIA RTX A5000 24 GB, Driver 535.154.05,
-> CUDA 12.2.  Use `cu121` wheels (not `cu124`).
+> **Validated hardware:** 8× NVIDIA A5000-class GPUs (24 GB each), CUDA 12.x
+> with the 535.x driver line. Install PyTorch from the `cu121` wheel index
+> to match this stack.
 
 ```bash
 bash scripts/server_migrate.sh      # idempotent; ~5 min on a fast link
 
-# Install GPU stack (cu121 — required for driver 535):
+# Install GPU stack (cu121 wheels):
 pip install -r requirements-gpu.txt \
     --extra-index-url https://download.pytorch.org/whl/cu121
 
@@ -204,12 +207,12 @@ make dashboard    # Streamlit on :8501
 
 On a **Docker host**: `docker compose --profile vllm up -d`.
 
-On the **athena SLURM cluster** (no Docker / no sudo), serve via the bundled
-job script — run vLLM in its **own conda env** (it pins its own torch /
+On a **SLURM cluster** (no Docker / no sudo), serve via the bundled job
+script — run vLLM in its **own conda env** (it pins its own torch /
 transformers, so it must not share the `invest_forge` training env):
 
 ```bash
-# one-time: a dedicated serving env (vllm 0.6.3.post1 is cu121 / driver-535 safe)
+# one-time: a dedicated serving env
 conda create -n vllm python=3.11 -y && conda activate vllm
 pip install "vllm==0.6.3.post1" "transformers==4.46.3"
 
@@ -220,28 +223,12 @@ srun --jobid=<jobid> --overlap --pty bash
 bash scripts/analyze_client.sh 688981.SH
 ```
 
-**GPU / port pitfalls (learned the hard way).** `serve_vllm.sbatch` ships with
-`--gres=gpu:1` commented out, so SLURM reserves no specific card and vLLM
-defaults to **GPU 0**. If GPU 0 is already busy (a stale server, a training
-job), startup dies with `CUDA out of memory`; if its port is taken you get
-`Address already in use`. Pin a free card and/or an open port at submit time —
-both env vars are honoured by the script:
-
-```bash
-nvidia-smi --query-gpu=index,memory.free --format=csv   # find an idle card
-CUDA_VISIBLE_DEVICES=6 PORT=8001 sbatch scripts/serve_vllm.sbatch
-VLLM_PORT=8001 bash scripts/analyze_client.sh 688981.SH  # client must match the port
-```
-
-A leftover server squats both the card and the port — `kill <pid>` it (the OOM
-trace prints the offending PID) or just dodge to a free card + port as above.
-
 > See [`docs/W2_LORA_RUNBOOK.md`](docs/W2_LORA_RUNBOOK.md) for the full
-> fine-tuning workflow and [`scripts/serve_vllm.sbatch`](scripts/serve_vllm.sbatch)
-> for the SLURM serving recipe — validated end-to-end on node4: the
-> **temperature-augmented, retrained** `investforge-analyst` adapter serves the
-> analyst node and `/analyze` returns a full BUY/HOLD/SELL recommendation
-> (rating · confidence · rationale · risk_factors · target_price).
+> fine-tuning workflow, GPU/port allocation notes, and SLURM serving recipe.
+> Validated end-to-end: the temperature-augmented, retrained
+> `investforge-analyst` adapter serves the analyst node and `/analyze`
+> returns a full BUY/HOLD/SELL recommendation (rating · confidence ·
+> rationale · risk_factors · target_price).
 
 ---
 
@@ -318,17 +305,25 @@ pytest -q
 
 ---
 
-## Roadmap (4-week sprint)
+## Roadmap & measured deliverables
 
-| Week | Deliverable                                                          | Status |
-|------|----------------------------------------------------------------------|--------|
-| W1   | Fundamental analysis report on a single A-share name                 | ⏳ on user |
-| W2   | LoRA distill of Qwen2.5-7B analyst + vLLM adapter serving + routing | ✅ **shipped live** (trained → eval → vLLM-served → `/analyze` end-to-end on SLURM) → measured non-ceiling delta on a 200-example temperature-augmented distill set: rating-accuracy 0.867→0.900, confidence-MAE 0.0283→0.0200 (30-ex val); see [docs/W2_LORA_RUNBOOK.md](docs/W2_LORA_RUNBOOK.md) |
-| W3   | Hybrid RAG + RAGAS Faithfulness ≥ 0.8                                | ✅ **measured** on node4 (Qwen2.5-7B judge, 6-row eval set): **Faithfulness 1.00, context_precision 1.00, context_recall 1.00** → gate PASS; real RAGAS runner + judge wiring committed |
-| W4   | 5-ticker end-to-end + alphalens backtest dashboard                   | ✅ **measured** on the sample (2024, 261 trading days, 5 tickers): IC 0.0172 / IC-IR 0.0343 / annualised return +13.29% / Sharpe 0.97 / MDD −8.01%; alphalens tear-sheet wired (`scripts/run_backtest.py --alphalens`) + dashboard expander shipped |
+**W2 — QLoRA distill of Qwen2.5-7B analyst + vLLM adapter serving** ✅
+- Rating accuracy: **0.867 → 0.900** (+3.3 pp)
+- Confidence MAE: **0.0283 → 0.0200** (−29%)
+- Eval: 30 held-out examples drawn from a 200-row temperature-augmented distill corpus
+- Served end-to-end via vLLM at `/analyze` on a SLURM-managed GPU node
+- Details: [`docs/W2_LORA_RUNBOOK.md`](docs/W2_LORA_RUNBOOK.md)
+
+**W3 — Hybrid RAG + RAGAS Faithfulness gate (target ≥ 0.8)** ✅
+- RAGAS pilot (n = 6, Qwen2.5-7B as judge): **Faithfulness 1.00, context_precision 1.00, context_recall 1.00** → gate PASS
+- Real RAGAS runner + judge wiring committed; scaling to a larger eval set is the next step
+
+**W4 — 5-ticker end-to-end + alphalens backtest dashboard** ✅
+- 2024 sample (261 trading days, 5 tickers): IC **0.0172** / IC-IR **0.0343** / annualised return **+13.29%** / Sharpe **0.97** / MDD **−8.01%**
+- alphalens tear-sheet wired (`scripts/run_backtest.py --alphalens`); dashboard expander shipped
 
 ---
 
 ## License
 
-MIT.  © 2026 Weijia Han.
+MIT.  © 2026 JANUS contributors.

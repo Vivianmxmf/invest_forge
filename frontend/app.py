@@ -149,6 +149,19 @@ body, p, div, span { color:var(--text); }
            padding:1px 6px; border-radius:2px; font-size:10.5px; }
 .tt-chg.up   { color:var(--buy);  background:rgba(38,194,129,.08); }
 .tt-chg.down { color:var(--sell); background:rgba(230,57,70,.08); }
+
+/* ── Live K-line stream indicator ── */
+.if-live-pulse {
+  display:inline-block; padding:4px 12px; border-radius:3px;
+  background:rgba(230,57,70,.08); border:1px solid rgba(230,57,70,.4);
+  color:var(--sell); font-size:10.5px; font-weight:700; letter-spacing:2px;
+  margin-bottom:8px; font-family:"JetBrains Mono",monospace;
+  animation:liveBlink 1.4s ease-in-out infinite;
+}
+@keyframes liveBlink {
+  0%, 100% { opacity:1;  box-shadow:0 0 0 0 rgba(230,57,70,.35); }
+  50%      { opacity:.7; box-shadow:0 0 0 6px rgba(230,57,70,0); }
+}
 /* GitHub "View source" pill in the status bar */
 a.if-cell.if-src { text-decoration:none; color:var(--text); cursor:pointer;
                    transition:.15s ease; }
@@ -850,13 +863,19 @@ def _kline_panel(ts_code: str, lookback: int = 120):
     return sub[list(keep.values())].rename(columns={v: k for k, v in keep.items()})
 
 
-def _render_candlestick(ts_code: str, *, height: int = 320) -> None:
+def _render_candlestick(ts_code: str, *, height: int = 320, live_tick: int = 0) -> None:
     """Render a Bloomberg-styled K-line with MA5/10/20 overlay + volume sub-panel.
 
     Layout: 72 % top panel = candlestick + three MA lines (amber/cyan/violet),
     28 % bottom panel = colored volume bars (green when close>=open, red else).
     Shared x-axis; range slider disabled; transparent bg blends with Bloomberg
     cell-panel container.
+
+    When ``live_tick`` > 0, the LAST candle is mutated to simulate a live
+    intraday print: the close is jittered ±0.4 % per tick, high/low expand
+    to envelope the new close, and the most recent volume bar grows by a
+    small random amount. Deterministic per (ticker, tick_n) so renders
+    inside a single fragment cycle are consistent.
     """
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
@@ -872,6 +891,17 @@ def _render_candlestick(ts_code: str, *, height: int = 320) -> None:
     # Compute MA on full lookback then crop the visible window so the lines are warm.
     has_volume = "volume" in df.columns
     df = df.copy()
+    if live_tick > 0:
+        import random
+        rng = random.Random(hash((ts_code, live_tick)) & 0xFFFFFFFF)
+        last_idx = df.index[-1]
+        last_close = float(df.loc[last_idx, "close"])
+        new_close = last_close * (1 + rng.uniform(-0.4, 0.4) / 100)
+        df.loc[last_idx, "close"] = new_close
+        df.loc[last_idx, "high"]  = max(float(df.loc[last_idx, "high"]),  new_close)
+        df.loc[last_idx, "low"]   = min(float(df.loc[last_idx, "low"]),   new_close)
+        if has_volume:
+            df.loc[last_idx, "volume"] = float(df.loc[last_idx, "volume"]) * rng.uniform(1.00, 1.05)
     df["ma5"]  = df["close"].rolling(5,  min_periods=1).mean()
     df["ma10"] = df["close"].rolling(10, min_periods=1).mean()
     df["ma20"] = df["close"].rolling(20, min_periods=1).mean()
@@ -1631,7 +1661,30 @@ with TAB_DEC:
         # (Streamlit's component model writes after the HTML block, but the
         #  Bloomberg grid keeps the chart inside the same visual quadrant.)
         _ticker_now = st.session_state.get("last_ticker", "")
-        _render_candlestick(_ticker_now, height=340)
+
+        # ── Live-stream toggle (controls the fragment auto-refresh below) ──
+        live_col, _ = st.columns([1, 4])
+        with live_col:
+            kline_live = st.toggle(
+                "● STREAM LIVE", value=st.session_state.get("kline_live", False),
+                key="kline_live",
+                help="3 s auto-refresh — jitter the last candle to simulate intraday print.",
+            )
+
+        # Streamlit fragment: partial rerun every 3 s when LIVE, otherwise once.
+        @st.fragment(run_every=3.0 if st.session_state.get("kline_live") else None)
+        def _streaming_kline_fragment(ts_code: str):
+            st.session_state["_kline_tick"] = int(st.session_state.get("_kline_tick", 0) or 0) + 1
+            tick = st.session_state["_kline_tick"] if st.session_state.get("kline_live") else 0
+            if st.session_state.get("kline_live"):
+                st.markdown(
+                    '<div class="if-live-pulse">● LIVE  ·  TICK '
+                    f'{tick}  ·  REFRESHES EVERY 3 S</div>',
+                    unsafe_allow_html=True,
+                )
+            _render_candlestick(ts_code, height=340, live_tick=tick)
+
+        _streaming_kline_fragment(_ticker_now)
 
         # ── PDF export + SHARE QR row ──
         try:
@@ -1793,6 +1846,39 @@ with TAB_RISK:
 # ─────────────────────────────────────────────────────────────────────────────
 # Tab — BACKTEST
 # ─────────────────────────────────────────────────────────────────────────────
+def _run_one_backtest(window: int, top_n: int):
+    """Single backtest config — returns (BacktestSummary, equity Series)."""
+    import pandas as pd
+    prices_csv = _SETTINGS.paths.sample_dir / "prices.csv"
+    panel = load_price_panel(prices_csv)
+    factor_wide = panel.apply(lambda col: make_lookahead_safe_signal(col, window))
+    bt = portfolio_long_short(panel, factor_wide, top_n=top_n)
+    weights = (
+        factor_wide.shift(1).rank(axis=1, ascending=False)
+        .le(min(top_n, max(1, len(panel.columns) // 2))).astype(float)
+    )
+    short_mask = (
+        factor_wide.shift(1).rank(axis=1, ascending=True)
+        .le(min(top_n, max(1, len(panel.columns) // 2)))
+    )
+    w = (weights - short_mask.astype(float))
+    w_sum = w.abs().sum(axis=1).replace(0, float("nan"))
+    w = w.div(w_sum, axis=0).fillna(0)
+    daily = (panel.pct_change() * w).sum(axis=1).dropna()
+    eq = (1.0 + daily).cumprod()
+    eq.name = f"MA{window}/N{top_n}"
+    return bt, eq, panel
+
+
+def _metrics_row(bt) -> None:
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("IC MEAN",       f"{bt.ic_mean:+.4f}")
+    m2.metric("IC IR",         f"{bt.ic_ir:+.4f}")
+    m3.metric("ANNUALISED",    f"{bt.annualised_return:+.2%}")
+    m4.metric("SHARPE",        f"{bt.sharpe:+.3f}")
+    m5.metric("MAX DRAWDOWN",  f"{bt.max_drawdown:+.2%}")
+
+
 with TAB_BT:
     st.markdown(
         '<div style="padding:18px 22px 0;"><div class="if-cell-h">'
@@ -1802,74 +1888,118 @@ with TAB_BT:
         '</div></div>', unsafe_allow_html=True,
     )
 
-    bcol1, bcol2, bcol3 = st.columns([1, 1, 1])
-    with bcol1:
-        bt_window = st.slider("MA WINDOW (D)", 5, 60, 20, 5)
-    with bcol2:
-        bt_top_n = st.slider("TOP-N PER SIDE", 1, 2, 2, 1)
-    with bcol3:
-        st.write("")
-        st.write("")
-        run_bt = st.button("▶ RUN BACKTEST", type="primary", use_container_width=True)
+    # ── AB-test mode toggle ──
+    ab_mode = st.toggle(
+        "🆎 AB-TEST MODE — run two configs side-by-side, judge by Sharpe",
+        value=False, key="ab_mode_toggle",
+    )
 
-    if run_bt:
-        try:
-            prices_csv = _SETTINGS.paths.sample_dir / "prices.csv"
-            panel = load_price_panel(prices_csv)
-            factor_wide = panel.apply(
-                lambda col: make_lookahead_safe_signal(col, bt_window)
-            )
-            bt = portfolio_long_short(panel, factor_wide, top_n=bt_top_n)
-
+    if not ab_mode:
+        # ── Single-config path (legacy) ──
+        bcol1, bcol2, bcol3 = st.columns([1, 1, 1])
+        with bcol1:
+            bt_window = st.slider("MA WINDOW (D)", 5, 60, 20, 5, key="bt_w_single")
+        with bcol2:
+            bt_top_n = st.slider("TOP-N PER SIDE", 1, 2, 2, 1, key="bt_n_single")
+        with bcol3:
+            st.write(""); st.write("")
+            run_bt = st.button("▶ RUN BACKTEST", type="primary", use_container_width=True,
+                               key="run_single")
+        if run_bt:
+            try:
+                bt, eq, panel = _run_one_backtest(bt_window, bt_top_n)
+                st.markdown('<div style="padding:18px 22px 8px;"><div class="if-cell-h">'
+                            'PERFORMANCE METRICS</div></div>', unsafe_allow_html=True)
+                _metrics_row(bt)
+                st.markdown('<div style="padding:18px 22px 6px;"><div class="if-cell-h">'
+                            'EQUITY CURVE · STRATEGY NAV</div></div>',
+                            unsafe_allow_html=True)
+                st.line_chart(eq, height=300)
+                st.markdown(
+                    f'<div style="padding:0 22px 18px;color:var(--muted);'
+                    f'font-size:11px;letter-spacing:1px;">'
+                    f'UNIVERSE: {", ".join(panel.columns.tolist())} · '
+                    f'RANGE: {panel.index[0].date()} → {panel.index[-1].date()} · '
+                    f'N: {bt.n_obs}</div>', unsafe_allow_html=True)
+            except Exception as exc:
+                st.error(f"BACKTEST ERROR: {exc}")
+        else:
+            st.markdown('<div class="if-empty">▼ ADJUST PARAMS · ▶ RUN BACKTEST</div>',
+                        unsafe_allow_html=True)
+    else:
+        # ── AB-test path ──
+        st.markdown(
+            '<div style="padding:8px 22px 14px;color:var(--muted);font-size:11px;'
+            'letter-spacing:1px;">Pick two factor configs. Same universe, same '
+            'sample. Winner = higher Sharpe. Same lookahead-safe pipeline both sides.'
+            '</div>', unsafe_allow_html=True,
+        )
+        ac, bc = st.columns(2)
+        with ac:
+            st.markdown('<div class="if-cell-h" style="margin-top:0;">'
+                        'VARIANT A · slow signal</div>', unsafe_allow_html=True)
+            ab_a_win = st.slider("MA WINDOW A", 5, 60, 20, 5, key="ab_a_w")
+            ab_a_top = st.slider("TOP-N A",      1, 2,  2, 1, key="ab_a_n")
+        with bc:
+            st.markdown('<div class="if-cell-h" style="margin-top:0;">'
+                        'VARIANT B · fast signal</div>', unsafe_allow_html=True)
+            ab_b_win = st.slider("MA WINDOW B", 5, 60, 5, 5, key="ab_b_w")
+            ab_b_top = st.slider("TOP-N B",      1, 2,  2, 1, key="ab_b_n")
+        run_ab = st.button("▶ RUN AB-TEST", type="primary",
+                            use_container_width=True, key="run_ab")
+        if run_ab:
+            try:
+                import pandas as pd
+                with st.spinner("RUNNING BOTH VARIANTS …"):
+                    bt_a, eq_a, panel = _run_one_backtest(ab_a_win, ab_a_top)
+                    bt_b, eq_b, _     = _run_one_backtest(ab_b_win, ab_b_top)
+                # Winner
+                a_label = f"A · MA{ab_a_win}/N{ab_a_top}"
+                b_label = f"B · MA{ab_b_win}/N{ab_b_top}"
+                if bt_a.sharpe > bt_b.sharpe:
+                    winner = a_label; w_sharpe = bt_a.sharpe
+                elif bt_b.sharpe > bt_a.sharpe:
+                    winner = b_label; w_sharpe = bt_b.sharpe
+                else:
+                    winner = "TIE"; w_sharpe = bt_a.sharpe
+                # Comparison table
+                cmp_df = pd.DataFrame({
+                    "METRIC":    ["IC Mean","IC IR","Annualised","Sharpe","Max DD","N obs"],
+                    a_label:     [f"{bt_a.ic_mean:+.4f}", f"{bt_a.ic_ir:+.4f}",
+                                  f"{bt_a.annualised_return:+.2%}", f"{bt_a.sharpe:+.3f}",
+                                  f"{bt_a.max_drawdown:+.2%}", str(bt_a.n_obs)],
+                    b_label:     [f"{bt_b.ic_mean:+.4f}", f"{bt_b.ic_ir:+.4f}",
+                                  f"{bt_b.annualised_return:+.2%}", f"{bt_b.sharpe:+.3f}",
+                                  f"{bt_b.max_drawdown:+.2%}", str(bt_b.n_obs)],
+                })
+                st.markdown(
+                    f'<div style="padding:18px 22px 6px;"><div class="if-cell-h">'
+                    f'VERDICT</div><div style="color:var(--amber);font-size:16px;'
+                    f'letter-spacing:2px;font-weight:700;">▶ WINNER · {_esc(winner)}'
+                    f'  ·  Sharpe {w_sharpe:+.3f}</div></div>',
+                    unsafe_allow_html=True,
+                )
+                st.markdown('<div style="padding:14px 22px 4px;"><div class="if-cell-h">'
+                            'METRIC COMPARISON</div></div>', unsafe_allow_html=True)
+                st.dataframe(cmp_df, hide_index=True, use_container_width=True)
+                # Combined equity chart
+                st.markdown('<div style="padding:14px 22px 6px;"><div class="if-cell-h">'
+                            'DUAL EQUITY CURVES</div></div>', unsafe_allow_html=True)
+                combined = pd.concat([eq_a.rename(a_label), eq_b.rename(b_label)], axis=1)
+                st.line_chart(combined, height=320)
+                st.markdown(
+                    f'<div style="padding:0 22px 18px;color:var(--muted);'
+                    f'font-size:11px;letter-spacing:1px;">'
+                    f'UNIVERSE: {", ".join(panel.columns.tolist())} · '
+                    f'RANGE: {panel.index[0].date()} → {panel.index[-1].date()}'
+                    f'</div>', unsafe_allow_html=True)
+            except Exception as exc:
+                st.error(f"AB-TEST ERROR: {exc}")
+        else:
             st.markdown(
-                '<div style="padding:18px 22px 8px;"><div class="if-cell-h">'
-                'PERFORMANCE METRICS</div></div>', unsafe_allow_html=True,
-            )
-            m1, m2, m3, m4, m5 = st.columns(5)
-            m1.metric("IC MEAN", f"{bt.ic_mean:+.4f}")
-            m2.metric("IC IR", f"{bt.ic_ir:+.4f}")
-            m3.metric("ANNUALISED", f"{bt.annualised_return:+.2%}")
-            m4.metric("SHARPE", f"{bt.sharpe:+.3f}")
-            m5.metric("MAX DRAWDOWN", f"{bt.max_drawdown:+.2%}")
-
-            weights = (
-                factor_wide.shift(1)
-                .rank(axis=1, ascending=False)
-                .le(min(bt_top_n, max(1, len(panel.columns) // 2)))
-                .astype(float)
-            )
-            short_mask = (
-                factor_wide.shift(1)
-                .rank(axis=1, ascending=True)
-                .le(min(bt_top_n, max(1, len(panel.columns) // 2)))
-            )
-            w = weights - short_mask.astype(float)
-            w_sum = w.abs().sum(axis=1).replace(0, float("nan"))
-            w = w.div(w_sum, axis=0).fillna(0)
-            daily_ret = (panel.pct_change() * w).sum(axis=1).dropna()
-            equity = (1.0 + daily_ret).cumprod()
-            equity.name = "NAV"
-
-            st.markdown(
-                '<div style="padding:18px 22px 6px;"><div class="if-cell-h">'
-                'EQUITY CURVE · STRATEGY NAV</div></div>',
+                '<div class="if-empty">▼ PICK PARAMS FOR A AND B · ▶ RUN AB-TEST</div>',
                 unsafe_allow_html=True,
             )
-            st.line_chart(equity, height=300)
-            st.markdown(
-                f'<div style="padding:0 22px 18px;color:var(--muted);'
-                f'font-size:11px;letter-spacing:1px;">'
-                f'UNIVERSE: {", ".join(panel.columns.tolist())} · '
-                f'RANGE: {panel.index[0].date()} → {panel.index[-1].date()} · '
-                f'N: {bt.n_obs}</div>', unsafe_allow_html=True,
-            )
-        except Exception as exc:
-            st.error(f"BACKTEST ERROR: {exc}")
-    else:
-        st.markdown(
-            '<div class="if-empty">▼ ADJUST PARAMS · ▶ RUN BACKTEST</div>',
-            unsafe_allow_html=True,
-        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

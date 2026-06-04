@@ -15,12 +15,12 @@
 
 <p align="center">
   <img src="docs/screenshots/ui_terminal_decision.png" alt="InvestForge Bloomberg Terminal — Decision view" width="100%">
-  <br><sub><b>Decision view</b> — 54px mono BUY/HOLD/SELL hero · 4 KPIs · 2×2 cell-panel grid (thesis / fundamentals / RAG / backtest snapshot)</sub>
+  <br><sub><b>Decision view</b> — 54px mono BUY/HOLD/SELL hero · 4 KPIs · 2×2 cell-panel grid (thesis / fundamentals / RAG / backtest snapshot) · <i>captured live from <a href="https://invest-forge.streamlit.app">invest-forge.streamlit.app</a></i></sub>
 </p>
 
 <p align="center">
   <img src="docs/screenshots/ui_terminal_landing.png" alt="InvestForge — first-visit guided tour" width="100%">
-  <br><sub><b>First-time guided tour</b> — 5-step welcome card · pre-warmed cache for 5 A-share sample tickers · instant Watchlist clicks</sub>
+  <br><sub><b>First-time guided tour</b> — 5-step welcome card · pre-warmed cache for 5 A-share sample tickers · instant Watchlist clicks · <i>captured live from <a href="https://invest-forge.streamlit.app">invest-forge.streamlit.app</a></i></sub>
 </p>
 
 > **Try it live:** [`invest-forge.streamlit.app`](https://invest-forge.streamlit.app) (no setup, no API key)

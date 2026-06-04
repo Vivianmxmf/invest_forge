@@ -4,6 +4,7 @@
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-invest--forge.streamlit.app-E5C46B?style=for-the-badge&logo=streamlit&logoColor=black)](https://invest-forge.streamlit.app)
 [![Tests](https://img.shields.io/badge/tests-226%20passed%20%2F%202%20skipped-26C281?style=for-the-badge&logo=pytest&logoColor=white)](#testing-validation)
+[![Coverage](https://img.shields.io/badge/coverage-75%25-26C281?style=for-the-badge&logo=codecov&logoColor=white)](#testing-validation)
 [![RAGAS](https://img.shields.io/badge/RAGAS-1.00%20%2F%201.00%20%2F%201.00-26C281?style=for-the-badge)](#w3--ragas-evaluation)
 [![Sharpe](https://img.shields.io/badge/Sharpe-+0.97-26C281?style=for-the-badge)](#w4--alphalens-backtest)
 [![LoRA](https://img.shields.io/badge/LoRA-+3.3pp%20acc%20%2F%20−29%25%20MAE-635bff?style=for-the-badge&logo=huggingface&logoColor=white)](#w2--qlora-distillation)

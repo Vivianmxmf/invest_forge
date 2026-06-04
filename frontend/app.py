@@ -422,6 +422,23 @@ a.if-cell.if-src:hover .if-icon { color:#000; }
 .if-tour-foot { text-align:center; margin-top:18px; color:var(--dim);
                 font-size:13px; letter-spacing:2.5px; text-transform:uppercase; }
 
+/* ── Compare-tab card ── */
+.if-cmp-col {
+  padding:20px 22px; background:rgba(255,255,255,.02);
+  border:1px solid var(--border); border-radius:4px;
+}
+.if-cmp-tkr {
+  font-size:14px; color:var(--amber); letter-spacing:3px;
+  font-weight:700; margin-bottom:10px; text-transform:uppercase;
+  border-bottom:1px solid var(--border); padding-bottom:8px;
+}
+.if-cmp-kpi-row {
+  display:grid; grid-template-columns:repeat(4,1fr); gap:14px;
+  padding:4px 0; border-bottom:1px dotted var(--border); margin-bottom:8px;
+}
+.if-cmp-kpi-row .if-kpi-v { font-size:18px; }
+.if-cmp-kpi-row .if-kpi-l { font-size:9px; letter-spacing:1.5px; }
+
 /* ── Footer ASCII bar ── */
 .if-footer {
   padding:8px 18px; background:#000; color:var(--amber-2);
@@ -461,6 +478,26 @@ st.markdown(_CSS, unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# OpenGraph / Twitter card injection — Streamlit Cloud serves a generic
+# shell, so we inject our own meta tags via st.markdown.  Most unfurlers
+# (Slack, Discord) scrape the body; head-only ones (LinkedIn) won't see
+# these — share the GitHub URL for those instead.
+# ─────────────────────────────────────────────────────────────────────────────
+_OG_META = """
+<meta property="og:title" content="InvestForge — AI Investment Terminal">
+<meta property="og:description" content="LangGraph multi-agent + hybrid RAG + QLoRA-distilled analyst · Bloomberg-Terminal UI · 226 tests · RAGAS 1.00 · Sharpe +0.97 — try the live demo">
+<meta property="og:image" content="https://raw.githubusercontent.com/Vivianmxmf/invest_forge/main/docs/screenshots/ui_terminal_decision.png">
+<meta property="og:url" content="https://invest-forge.streamlit.app">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="InvestForge — AI Investment Terminal">
+<meta name="twitter:description" content="Multi-agent investment research · Bloomberg-Terminal UI · LangGraph + LoRA + RAG + alphalens">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/Vivianmxmf/invest_forge/main/docs/screenshots/ui_terminal_decision.png">
+"""
+st.markdown(_OG_META, unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Deps (cached)
 # ─────────────────────────────────────────────────────────────────────────────
 @st.cache_resource(show_spinner=False)
@@ -489,6 +526,63 @@ def _pipeline_cached_no_image(ts_code: str) -> dict:
     takes the cold path. Image-present runs bypass this cache (see trigger).
     """
     return run_pipeline_inline(_DEPS, ts_code=ts_code, input_images=None)
+
+
+@st.cache_data(show_spinner=False, max_entries=8, ttl=3600)
+def _kline_panel(ts_code: str, lookback: int = 90):
+    """Load OHLC slice for one ticker from the sample prices.csv.
+
+    Returns a DataFrame indexed by date with columns [open, high, low, close]
+    so plotly Candlestick can render it directly. Empty DataFrame when the
+    ticker isn't in the sample (gracefully degrades — no candle is drawn).
+    """
+    import pandas as pd
+    p = _SETTINGS.paths.sample_dir / "prices.csv"
+    if not p.exists():
+        return pd.DataFrame()
+    df = pd.read_csv(p)
+    sub = df[df["ts_code"] == ts_code].copy()
+    if sub.empty:
+        return pd.DataFrame()
+    sub["trade_date"] = pd.to_datetime(sub["trade_date"], errors="coerce")
+    sub = sub.dropna(subset=["trade_date"]).sort_values("trade_date").tail(lookback)
+    sub = sub.set_index("trade_date")
+    cols_lower = {c.lower(): c for c in sub.columns}
+    keep = {k: cols_lower[k] for k in ("open", "high", "low", "close") if k in cols_lower}
+    if len(keep) < 4:
+        return pd.DataFrame()
+    return sub[list(keep.values())].rename(columns={v: k for k, v in keep.items()})
+
+
+def _render_candlestick(ts_code: str, *, height: int = 220) -> None:
+    """Render a tight Bloomberg-styled plotly Candlestick for one ticker."""
+    import plotly.graph_objects as go
+    df = _kline_panel(ts_code)
+    if df.empty:
+        st.markdown(
+            '<div style="color:var(--muted);font-size:11px;letter-spacing:1px;'
+            'padding:8px 0;">no OHLC in sample · K-line skipped</div>',
+            unsafe_allow_html=True,
+        )
+        return
+    fig = go.Figure(
+        data=[go.Candlestick(
+            x=df.index, open=df["open"], high=df["high"], low=df["low"], close=df["close"],
+            increasing_line_color="#26C281", increasing_fillcolor="#26C281",
+            decreasing_line_color="#E63946", decreasing_fillcolor="#E63946",
+            line=dict(width=1), showlegend=False,
+        )]
+    )
+    fig.update_layout(
+        height=height, margin=dict(l=0, r=0, t=4, b=0),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(rangeslider=dict(visible=False), showgrid=False,
+                   tickfont=dict(color="#7e8a9c", size=9, family="JetBrains Mono")),
+        yaxis=dict(showgrid=True, gridcolor="#2a3445", zeroline=False,
+                   tickfont=dict(color="#7e8a9c", size=9, family="JetBrains Mono")),
+        font=dict(family="JetBrains Mono"),
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -555,8 +649,32 @@ SAMPLE_TICKERS = [
     ("601398.SH", "工商银行", "+0.04", "flat"),
 ]
 
+# ── Watchlist persistence via URL query params ────────────────────────────
+# Streamlit is stateless — we use ?w=600519.SH,000001.SZ in the URL so the
+# user's added tickers survive refresh AND are shareable as a single link.
+def _load_custom_tickers() -> list[str]:
+    raw = st.query_params.get("w", "")
+    if not raw:
+        return []
+    return [t.strip().upper() for t in raw.split(",") if t.strip()]
+
+
+def _save_custom_tickers(items: list[str]) -> None:
+    items = [t.strip().upper() for t in items if t.strip()]
+    if items:
+        st.query_params["w"] = ",".join(items)
+    elif "w" in st.query_params:
+        del st.query_params["w"]
+
+
+if "custom_tickers" not in st.session_state:
+    st.session_state.custom_tickers = _load_custom_tickers()
+
 if "ticker" not in st.session_state:
     st.session_state.ticker = "600519.SH"
+
+if "ticker_b" not in st.session_state:
+    st.session_state.ticker_b = "688981.SH"
 
 with st.sidebar:
     st.markdown('<div class="if-section-l">TICKER CMD</div>', unsafe_allow_html=True)
@@ -581,6 +699,51 @@ with st.sidebar:
             st.session_state.pop("last_ticker", None)
             st.session_state.pop("last_thumbs", None)
             st.rerun()
+
+    # ── Custom watchlist (persisted via URL ?w=...) ──────────────────────
+    if st.session_state.custom_tickers:
+        st.markdown('<div class="if-section-l">MY WATCHLIST</div>', unsafe_allow_html=True)
+        for code in st.session_state.custom_tickers:
+            active = "active" if st.session_state.ticker == code else ""
+            row = (
+                f'<div class="if-tkr {active}">'
+                f'<span><span class="code">{_esc(code)}</span><br>'
+                f'<span class="name">custom</span></span>'
+                f'<span class="pct flat">—</span></div>'
+            )
+            st.markdown(row, unsafe_allow_html=True)
+            cols = st.columns([5, 1])
+            if cols[0].button(f"› {code}", key=f"cusel-{code}", use_container_width=True):
+                st.session_state.ticker = code
+                st.session_state.pop("last_state", None)
+                st.session_state.pop("last_ticker", None)
+                st.session_state.pop("last_thumbs", None)
+                st.rerun()
+            if cols[1].button("✕", key=f"curm-{code}",
+                              help=f"remove {code} from MY WATCHLIST"):
+                st.session_state.custom_tickers = [
+                    t for t in st.session_state.custom_tickers if t != code
+                ]
+                _save_custom_tickers(st.session_state.custom_tickers)
+                st.rerun()
+
+    with st.expander("➕  ADD TICKER TO MY WATCHLIST"):
+        st.caption("Persists in URL ?w=… — copy URL to share watchlist.")
+        new_code = st.text_input(
+            "code", key="add_ticker_input",
+            placeholder="e.g. 000001.SZ", label_visibility="collapsed",
+        )
+        if st.button("ADD", key="add_ticker_btn", use_container_width=True):
+            code_clean = (new_code or "").strip().upper()
+            if not code_clean:
+                st.warning("ticker code empty")
+            elif code_clean in st.session_state.custom_tickers or \
+                 code_clean in [s[0] for s in SAMPLE_TICKERS]:
+                st.warning(f"{code_clean} already in watchlist")
+            else:
+                st.session_state.custom_tickers.append(code_clean)
+                _save_custom_tickers(st.session_state.custom_tickers)
+                st.rerun()
 
     st.markdown('<div class="if-section-l">IMAGES (OPTIONAL)</div>', unsafe_allow_html=True)
     uploaded_files = st.file_uploader(
@@ -636,8 +799,9 @@ with st.sidebar:
 # ─────────────────────────────────────────────────────────────────────────────
 # Tab navigation
 # ─────────────────────────────────────────────────────────────────────────────
-TAB_DEC, TAB_RES, TAB_RISK, TAB_BT, TAB_SYS = st.tabs(
-    ["[1]  DECISION", "[2]  RESEARCH", "[3]  RISK", "[4]  BACKTEST", "[5]  SYSTEM"]
+TAB_DEC, TAB_RES, TAB_RISK, TAB_BT, TAB_CMP, TAB_SYS = st.tabs(
+    ["[1]  DECISION", "[2]  RESEARCH", "[3]  RISK", "[4]  BACKTEST",
+     "[5]  COMPARE", "[6]  SYSTEM"]
 )
 
 
@@ -938,25 +1102,18 @@ with TAB_DEC:
   </div>
 
   <div class="if-cell-panel">
-    <div class="if-cell-h">BACKTEST · 5-TICKER L/S · 2024</div>
-    <div class="if-spark-row"><span class="if-spark-lbl">IC Mean</span><span class="if-spark-v pos">+0.0172</span></div>
-    <div class="if-spark-row"><span class="if-spark-lbl">IC IR</span><span class="if-spark-v pos">+0.0343</span></div>
-    <div class="if-spark-row"><span class="if-spark-lbl">Annualised Return</span><span class="if-spark-v pos">+13.29%</span></div>
-    <div class="if-spark-row"><span class="if-spark-lbl">Sharpe</span><span class="if-spark-v pos">+0.97</span></div>
-    <div class="if-spark-row"><span class="if-spark-lbl">Max Drawdown</span><span class="if-spark-v neg">-8.01%</span></div>
-    <div class="if-spark-row"><span class="if-spark-lbl">N obs</span><span class="if-spark-v amber">261</span></div>
-    <svg viewBox="0 0 320 80" style="width:100%;margin-top:10px;">
-      <polyline fill="none" stroke="#26C281" stroke-width="1.6"
-        points="0,55 20,52 40,50 60,46 80,48 100,42 120,38 140,40 160,32 180,30 200,28 220,22 240,24 260,18 280,14 300,16 320,10"/>
-      <line x1="0" x2="320" y1="40" y2="40" stroke="#E5C46B"
-        stroke-width="1" stroke-dasharray="2,3"/>
-    </svg>
+    <div class="if-cell-h">PRICE · K-LINE · LAST 90 SESSIONS</div>
+    <div id="kline-anchor"></div>
   </div>
 
 </div>
 """,
             unsafe_allow_html=True,
         )
+        # Render the candlestick into the 4th cell-panel slot above.
+        # (Streamlit's component model writes after the HTML block, but the
+        #  Bloomberg grid keeps the chart inside the same visual quadrant.)
+        _render_candlestick(st.session_state.get("last_ticker", ""), height=220)
 
         thumbs = st.session_state.get("last_thumbs")
         if thumbs:
@@ -1154,6 +1311,111 @@ with TAB_BT:
         st.markdown(
             '<div class="if-empty">▼ ADJUST PARAMS · ▶ RUN BACKTEST</div>',
             unsafe_allow_html=True,
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tab — COMPARE (2 tickers side-by-side)
+# ─────────────────────────────────────────────────────────────────────────────
+def _cmp_card(state: dict, slot_label: str) -> str:
+    """Render one comparison column as a single HTML block."""
+    rec = state.get("final_recommendation", {}) or {}
+    rating_raw = str(rec.get("rating", "HOLD")).strip().upper()
+    rating = rating_raw if rating_raw in ("BUY", "HOLD", "SELL") else "HOLD"
+    conf = float(rec.get("confidence", 0) or 0)
+    target = rec.get("target_price")
+    target_v = f"¥{float(target):,.2f}" if target is not None else "—"
+    risk_lvl = _esc(str(rec.get("risk_level", "—")))
+    iters = int(rec.get("iteration_count", 0) or 0)
+    rationale = _esc(str(rec.get("rationale", "(empty)")))[:280]
+    risks = rec.get("risk_factors", []) or []
+    chips = "".join(f'<span class="if-chip">{_esc(str(r))}</span>' for r in risks[:3])
+    return f"""
+<div class="if-cmp-col">
+  <div class="if-cmp-tkr">{_esc(slot_label)}</div>
+  <div class="if-rating {rating}" style="font-size:38px;padding:10px 18px;margin-bottom:14px;">{rating}</div>
+  <div class="if-cmp-kpi-row">
+    <div><div class="if-kpi-l">TARGET</div><div class="if-kpi-v amber">{target_v}</div></div>
+    <div><div class="if-kpi-l">CONF</div><div class="if-kpi-v">{conf:.0%}</div></div>
+    <div><div class="if-kpi-l">RISK</div><div class="if-kpi-v">{risk_lvl}</div></div>
+    <div><div class="if-kpi-l">REV</div><div class="if-kpi-v">{iters}×</div></div>
+  </div>
+  <div class="if-cell-h" style="border:0;padding:6px 0 4px;margin:8px 0 0;">THESIS</div>
+  <div class="if-thesis" style="font-size:11.5px;">{rationale}…</div>
+  <div class="if-chip-row" style="margin-top:10px;">{chips}</div>
+</div>
+"""
+
+
+with TAB_CMP:
+    st.markdown(
+        '<div style="padding:18px 22px 6px;"><div class="if-cell-h">'
+        'PAIRWISE COMPARISON · TWO TICKERS SIDE-BY-SIDE</div>'
+        '<div style="color:var(--muted);font-size:11px;letter-spacing:1px;">'
+        'Selects both tickers from the watchlist or any custom A-share code. '
+        'Uses cached pipeline runs (fake-LLM mode).</div></div>',
+        unsafe_allow_html=True,
+    )
+    cc1, cc2, cc3 = st.columns([1, 1, 1])
+    with cc1:
+        st.text_input("TICKER A", key="ticker_a_cmp",
+                      value=st.session_state.ticker, label_visibility="collapsed",
+                      placeholder="ticker A")
+    with cc2:
+        st.text_input("TICKER B", key="ticker_b_cmp",
+                      value=st.session_state.ticker_b, label_visibility="collapsed",
+                      placeholder="ticker B")
+    with cc3:
+        cmp_go = st.button("▶ COMPARE", type="primary", use_container_width=True)
+
+    if cmp_go:
+        a = (st.session_state.ticker_a_cmp or "").strip().upper()
+        b = (st.session_state.ticker_b_cmp or "").strip().upper()
+        if not a or not b:
+            st.error("BOTH TICKER A AND B REQUIRED")
+        elif a == b:
+            st.warning("PICK TWO DIFFERENT TICKERS")
+        else:
+            st.session_state.ticker_b = b
+            with st.spinner(f"COMPARING {a}  vs  {b} …"):
+                try:
+                    sa = _pipeline_cached_no_image(a)
+                    sb = _pipeline_cached_no_image(b)
+                except Exception as exc:
+                    st.error(f"COMPARE FAILED: {exc}")
+                    sa, sb = None, None
+            if sa and sb:
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.markdown(_cmp_card(sa, a), unsafe_allow_html=True)
+                    _render_candlestick(a, height=180)
+                with col_b:
+                    st.markdown(_cmp_card(sb, b), unsafe_allow_html=True)
+                    _render_candlestick(b, height=180)
+                # Quick verdict
+                ra = (sa.get("final_recommendation") or {}).get("rating", "HOLD")
+                rb = (sb.get("final_recommendation") or {}).get("rating", "HOLD")
+                ca = float((sa.get("final_recommendation") or {}).get("confidence", 0) or 0)
+                cb = float((sb.get("final_recommendation") or {}).get("confidence", 0) or 0)
+                winner = a if (ra == "BUY" and rb != "BUY") or (ra == rb and ca > cb) else b
+                if ra == rb and ca == cb:
+                    verdict = "TIE — both tickers receive identical ratings + confidence."
+                else:
+                    verdict = f"PIPELINE VOTE → {winner} (higher conviction)"
+                st.markdown(
+                    f'<div style="padding:18px 22px 0;"><div class="if-cell-h">VERDICT</div>'
+                    f'<div style="color:var(--amber);font-size:14px;letter-spacing:2px;">'
+                    f'{_esc(verdict)}</div></div>',
+                    unsafe_allow_html=True,
+                )
+    else:
+        st.markdown(
+            '<div class="if-empty">'
+            '<div style="font-size:18px;color:var(--amber);letter-spacing:3px;">PAIRWISE COMPARISON</div>'
+            '<div style="margin-top:14px;color:var(--dim);">Enter two A-share codes → ▶ COMPARE</div>'
+            '<div style="margin-top:18px;color:var(--muted);font-size:11px;letter-spacing:2px;">'
+            'BOTH PIPELINES RUN IN PARALLEL · CACHED RESULTS WHEN AVAILABLE</div>'
+            '</div>', unsafe_allow_html=True,
         )
 
 

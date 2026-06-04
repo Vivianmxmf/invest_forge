@@ -7,7 +7,7 @@ environment, and POST images to `/analyze`.
 
 ## 1. Prerequisites
 
-- 8× NVIDIA RTX A5000 24 GB (node1.athena).  The vision VLM occupies ONE card.
+- Multi-GPU host with at least one NVIDIA A5000-class card (24 GB).  The vision VLM occupies ONE card.
 - `docker-compose.yml` with the `vllm-vision` service (profiles: `vllm`, `all`).
   The service pins a Qwen2.5-VL-capable vLLM image (**>= 0.7.2** — 0.6.3 predates
   Qwen2.5-VL support); bump the tag if your weights need a newer runtime.

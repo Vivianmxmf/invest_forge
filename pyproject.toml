@@ -9,7 +9,7 @@ description = "AI-driven subjective investment research assistant — LangGraph 
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 license = { text = "MIT" }
-authors = [{ name = "Weijia Han", email = "weivivi77@gmail.com" }]
+authors = [{ name = "Vivianmxmf" }]
 keywords = ["langgraph", "rag", "investment-research", "ai-agent", "multi-agent"]
 
 [project.urls]

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # scripts/server_migrate.sh — one-shot InvestForge server migration.
 #
-# Hardware target (node1.athena — verified 2026-05):
-#   8× NVIDIA RTX A5000 24 GB, Driver 535.154.05, CUDA 12.2.
+# Hardware target (validated multi-GPU host, verified 2026-05):
+#   8× NVIDIA A5000-class GPUs (24 GB each), Driver 535.x, CUDA 12.2.
 #   NOTE: driver 535.x caps the supported CUDA runtime at 12.2 — PyTorch
 #   cu124 wheels will NOT load.  All GPU packages must use cu121 wheels.
-#   Qwen2.5-7B fits on a single A5000; 7 cards remain free for training.
+#   Qwen2.5-7B fits on a single A5000; remaining cards are free for training.
 #
 # What it does, in order:
 #   0. Pre-flight (OS / Python / conda / Docker / GPU / disk).
@@ -269,7 +269,7 @@ heading "6. GPU stack (finetune + vLLM serving)"
 
 if (( HAS_GPU == 1 )); then
     step "installing GPU-only dependencies (this is heavy)"
-    # Driver 535.154.05 caps CUDA at 12.2 → must use cu121 wheels.
+    # Driver 535.x caps CUDA at 12.2 → must use cu121 wheels.
     # cu124 wheels will silently load but then crash at import time.
     GPU_INDEX_URL="https://download.pytorch.org/whl/cu121"
 

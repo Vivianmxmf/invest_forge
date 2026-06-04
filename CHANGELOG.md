@@ -261,7 +261,7 @@ All version-level changes to **JANUS** (Python package: `invest_forge`) are docu
   behaviour is unchanged when `LOCAL_ANALYST_MODEL` is not configured.
 
 - **cu121 server fix:** `scripts/server_migrate.sh` corrected to target
-  node1.athena's actual hardware (8× A5000, Driver 535.154.05, CUDA 12.2).
+  the validated server hardware (8× A5000-class GPUs, Driver 535.x, CUDA 12.2).
   GPU stack now installs from `requirements-gpu.txt` with
   `--extra-index-url .../cu121`; hard `cu124` / `torch==2.4.*` pins removed.
 
@@ -291,7 +291,7 @@ All version-level changes to **JANUS** (Python package: `invest_forge`) are docu
 
 ### Notes & Caveats
 
-- GPU steps (Steps 3–6 in the runbook) run on node1.athena only.  Running
+- GPU steps (Steps 3–6 in the runbook) require a CUDA-capable host.  Running
   `train_lora.py` or the vLLM compose service on a CPU-only machine will fail.
 - The vLLM container will exit immediately if the adapter directory
   (`models/adapters/investforge-analyst/`) does not exist or is empty when the

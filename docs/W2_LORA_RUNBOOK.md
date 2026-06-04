@@ -9,7 +9,7 @@ the base model.
 
 ## (0) Hardware & CUDA note
 
-**Server:** node1.athena — 8× NVIDIA RTX A5000 24 GB, Driver 535.154.05.
+**Validated hardware:** multi-GPU host — 8× NVIDIA A5000-class GPUs (24 GB each), Driver 535.x.
 
 Driver 535.x caps the supported CUDA runtime at **12.2**.  PyTorch `cu124`
 wheels will fail to import.  All GPU packages must be installed with the
@@ -28,7 +28,7 @@ The remaining 7 cards are free for parallel training runs.
 ## Step 1 — Run the migration script
 
 ```bash
-# From the repo root on node1.athena
+# From the repo root on the GPU server
 bash scripts/server_migrate.sh
 
 # Then install the GPU stack (cu121 wheels):

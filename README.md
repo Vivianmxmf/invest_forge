@@ -18,34 +18,49 @@
 
 <p align="center">
   <img src="docs/screenshots/ui_terminal_decision.png" alt="JANUS Bloomberg Terminal — Decision view" width="100%">
-  <br><sub><b>Decision view</b> — 54px mono BUY/HOLD/SELL hero · 4 KPIs · 2×2 cell-panel grid (thesis / fundamentals / RAG / K-line snapshot) · <i>captured live from <a href="https://invest-forge.streamlit.app">invest-forge.streamlit.app</a></i></sub>
+  <br>
+  <sub><b>Decision view</b> — 54&nbsp;px mono BUY/HOLD/SELL hero · 4 KPIs · 2×2 cell-panel grid (thesis · fundamentals · RAG · K-line snapshot)</sub>
+  <br>
+  <sub><i>Captured live from <a href="https://invest-forge.streamlit.app">invest-forge.streamlit.app</a></i></sub>
 </p>
 
 <p align="center">
   <img src="docs/screenshots/ui_terminal_landing.png" alt="JANUS — first-visit guided tour" width="100%">
-  <br><sub><b>First-time guided tour</b> — 5-step welcome card · pre-warmed cache for 5 A-share sample tickers · live ticker tape under the status bar · <i>captured from <a href="https://invest-forge.streamlit.app">invest-forge.streamlit.app</a></i></sub>
+  <br>
+  <sub><b>First-time guided tour</b> — 5-step welcome card · pre-warmed cache for 5 A-share sample tickers · live ticker tape under the status bar</sub>
+  <br>
+  <sub><i>Captured from <a href="https://invest-forge.streamlit.app">invest-forge.streamlit.app</a></i></sub>
 </p>
 
 <p align="center">
   <img src="docs/screenshots/ui_terminal_screen.png" alt="JANUS — [6] SCREEN batch ticker analyzer" width="100%">
-  <br><sub><b>[6] SCREEN — batch ticker analyzer</b> · concurrent <code>ThreadPoolExecutor(max_workers=8)</code> over 6 prefab universes (白酒 / 半导体 / 新能源 / 医药 / 银行 + custom paste) · ranks BUY → HOLD → SELL by confidence · CSV export</sub>
+  <br>
+  <sub><b>[6] SCREEN — batch ticker analyzer</b> · concurrent <code>ThreadPoolExecutor(max_workers=8)</code> · ranks BUY → HOLD → SELL by confidence · CSV export</sub>
+  <br>
+  <sub><i>Prefab universes: 白酒 · 半导体 · 新能源 · 医药 · 银行 · custom paste</i></sub>
 </p>
 
 <p align="center">
   <img src="docs/screenshots/ui_terminal_trace.png" alt="JANUS — [7] TRACE observability flamegraph" width="100%">
-  <br><sub><b>[7] TRACE — observability flamegraph</b> · per-node Gantt (cyan=data · violet=LLM · amber=conditional) · click any node to inspect its live state slice · honest caveat: structure REAL, timings ESTIMATED (set <code>USE_LANGGRAPH=true + LANGCHAIN_API_KEY</code> for exact LangSmith)</sub>
+  <br>
+  <sub><b>[7] TRACE — observability flamegraph</b> · per-node Gantt (cyan = data · violet = LLM · amber = conditional) · click any node to inspect its live state slice</sub>
+  <br>
+  <sub><i>Honest caveat: structure is REAL, timings are ESTIMATED. Set <code>USE_LANGGRAPH=true</code> + <code>LANGCHAIN_API_KEY</code> for exact LangSmith traces.</i></sub>
 </p>
 
-> **Try JANUS live:** [`invest-forge.streamlit.app`](https://invest-forge.streamlit.app) (no setup, no API key)
-> &nbsp; · &nbsp; **Run it locally:** `LLM_PROVIDER=fake python -m streamlit run frontend/app.py` → `localhost:8501`
-> &nbsp; · &nbsp; **Deploy your own:** see [`docs/DEPLOY_STREAMLIT_CLOUD.md`](docs/DEPLOY_STREAMLIT_CLOUD.md)
->
-> **Highlights:**
-> - Bloomberg-terminal aesthetic — JetBrains Mono + amber accent, 8-tab F-key navigation
-> - **K-line** with MA overlay + volume sub-panel; **streaming K-line** (3 s fragment)
-> - **COMPARE** (pairwise), **SCREEN** (batch / concurrent pipelines), **AB-test mode**
-> - **TRACE** observability flamegraph, **PDF report export**, **SHARE QR**
-> - Watchlist URL persistence, mobile-responsive, WCAG-AA contrast verified
+### Get started
+
+- **Try it live** — [`invest-forge.streamlit.app`](https://invest-forge.streamlit.app) · no setup, no API key required
+- **Run it locally** — `LLM_PROVIDER=fake python -m streamlit run frontend/app.py` → `localhost:8501`
+- **Deploy your own** — see [`docs/DEPLOY_STREAMLIT_CLOUD.md`](docs/DEPLOY_STREAMLIT_CLOUD.md)
+
+### Highlights
+
+- Bloomberg-terminal aesthetic — JetBrains Mono + amber accent, 8-tab F-key navigation
+- **K-line** with MA overlay + volume sub-panel; **streaming K-line** (3&nbsp;s fragment)
+- **COMPARE** (pairwise) · **SCREEN** (batch / concurrent pipelines) · **AB-test mode**
+- **TRACE** observability flamegraph · **PDF report export** · **SHARE QR**
+- Watchlist URL persistence · mobile-responsive · WCAG-AA contrast verified
 
 JANUS implements a production-grade A-share research workflow.
 Input a stock ticker → the system pulls fundamentals + macro + news, runs a
@@ -260,44 +275,90 @@ boot commands, and security model.
 
 ## Environment variables (`.env.example`)
 
-| Key                              | Purpose                                            |
-|----------------------------------|----------------------------------------------------|
-| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` | Pick one for the LLM layer |
-| `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_MODEL` | Use a self-hosted vLLM endpoint (`Qwen/Qwen2.5-7B-Instruct`) |
-| `LOCAL_ANALYST_MODEL`            | LoRA adapter name for the analyst node (`investforge-analyst`); other nodes use the base model |
-| `LOCAL_VISION_BASE_URL` / `LOCAL_VISION_MODEL` | Vision VLM endpoint + model (`Qwen/Qwen2.5-VL-7B-Instruct`); leave blank to disable vision |
-| `VISION_ALLOW_LOCAL_PATHS`       | `false` (safe default) — set `true` only in trusted environments |
-| `VISION_MAX_IMAGES` / `VISION_MAX_BYTES` / `VISION_MAX_PIXELS` | Image input policy |
-| `LORA_ADAPTERS_DIR` / `LORA_ADAPTER_PATH` | Host adapter dir + in-container adapter path for docker-compose |
-| `LLM_PROVIDER`                   | `fake` (default) / `openai` / `anthropic` / `local` |
-| `TEACHER_LLM_PROVIDER` / `TEACHER_OPENAI_API_KEY` | Teacher model for SFT dataset distillation |
-| `TUSHARE_TOKEN`                  | Real fundamental + news data on the server         |
-| `QDRANT_URL` / `QDRANT_COLLECTION` | Production knowledge-base location              |
-| `EMBEDDING_MODEL` / `RERANKER_MODEL` | bge-small-zh + bge-reranker-v2-m3              |
-| `LANGCHAIN_TRACING_V2` / `LANGCHAIN_API_KEY` | LangSmith observability             |
-
 `.env` is git-ignored; only `.env.example` is checked in.
+
+### LLM layer
+
+| Key | Purpose |
+|-----|---------|
+| `LLM_PROVIDER` | `fake` (default) · `openai` · `anthropic` · `local` |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` | Cloud LLM credentials — pick one |
+| `LOCAL_LLM_BASE_URL` | Self-hosted vLLM endpoint URL |
+| `LOCAL_LLM_MODEL` | Model name at the endpoint (e.g. `Qwen/Qwen2.5-7B-Instruct`) |
+| `LOCAL_ANALYST_MODEL` | LoRA adapter name for the analyst node (`investforge-analyst`) — other nodes use the base model |
+
+### Multimodal vision (opt-in)
+
+| Key | Purpose |
+|-----|---------|
+| `LOCAL_VISION_BASE_URL` | Vision VLM endpoint URL |
+| `LOCAL_VISION_MODEL` | Vision model (e.g. `Qwen/Qwen2.5-VL-7B-Instruct`) — leave blank to disable vision |
+| `VISION_ALLOW_LOCAL_PATHS` | `false` (safe default) — set `true` only in trusted environments |
+| `VISION_MAX_IMAGES` / `VISION_MAX_BYTES` / `VISION_MAX_PIXELS` | Image-input policy limits |
+
+### Data sources & RAG
+
+| Key | Purpose |
+|-----|---------|
+| `TUSHARE_TOKEN` | Real fundamental + news data on the server |
+| `QDRANT_URL` / `QDRANT_COLLECTION` | Production knowledge-base location |
+| `EMBEDDING_MODEL` / `RERANKER_MODEL` | `bge-small-zh` + `bge-reranker-v2-m3` |
+
+### LoRA adapter serving (Docker / vLLM)
+
+| Key | Purpose |
+|-----|---------|
+| `LORA_ADAPTERS_DIR` | Host adapter directory |
+| `LORA_ADAPTER_PATH` | In-container adapter path for docker-compose |
+
+### Teacher model (SFT distillation)
+
+| Key | Purpose |
+|-----|---------|
+| `TEACHER_LLM_PROVIDER` | Teacher provider — `openai` · `anthropic` · `hf` (in-process) |
+| `TEACHER_OPENAI_API_KEY` | Teacher API key (only needed for cloud teachers) |
+
+### Observability
+
+| Key | Purpose |
+|-----|---------|
+| `LANGCHAIN_TRACING_V2` | Set to `1` to enable LangSmith tracing |
+| `LANGCHAIN_API_KEY` | LangSmith API key |
 
 ---
 
 ## Tests
 
-226 pytest unit tests, fully network-free, cover:
+226 pytest unit tests, fully network-free.
 
-* domain enums + lenient rating parsing
-* config loader edge cases (missing env, bad int)
-* lexicon sentiment scorer
-* fake LLM dispatch + handler-priority ordering · in-process HF provider wiring
-* hybrid retriever (BM25, HyDE, reranker), recursive chunking
-* every agent node (researcher / analyst / risk-control / vision / output)
-* end-to-end pipeline including conditional revision loop + iteration cap
-* lookahead-bias-safe signal + simple / cross-sectional backtest + 5-ticker panel loader / MultiIndex factor builder (alphalens-ready)
-* heuristic quality scorer + RAGAS (stub + real-judge runner, eval-set loader, faithfulness gate)
-* SFT dataset distillation + train/serve prompt parity
-* temperature-augmented distillation (sample ladder, full-identity dedup, prompt-parity)
-* LangGraph runtime end-to-end + graph/inline parity (runs on server; skipped when langgraph absent)
-* SSRF-hardened image-input validator (IP pinning, path traversal, bombs)
-* multimodal vision wiring (ChatMessage images, vision node gating)
+**Core domain & config**
+- Domain enums + lenient rating parsing
+- Config loader edge cases (missing env, bad int)
+- Lexicon sentiment scorer
+
+**LLM layer**
+- Fake LLM dispatch + handler-priority ordering
+- In-process HF provider wiring
+
+**RAG**
+- Hybrid retriever — BM25, HyDE, reranker
+- Recursive chunking
+- SSRF-hardened image-input validator (IP pinning, path traversal, decompression bombs)
+
+**Agents**
+- Every node — researcher, analyst, risk-control, vision, output
+- End-to-end pipeline with conditional revision loop + iteration cap
+- LangGraph runtime end-to-end + graph/inline parity (skipped when `langgraph` is absent)
+- Multimodal vision wiring (`ChatMessage` images, vision-node gating)
+
+**Backtest**
+- Lookahead-bias-safe signal + simple & cross-sectional backtest
+- 5-ticker panel loader + MultiIndex factor builder (alphalens-ready)
+
+**Evaluation & distillation**
+- Heuristic quality scorer + RAGAS (stub + real-judge runner, eval-set loader, faithfulness gate)
+- SFT dataset distillation + train/serve prompt parity
+- Temperature-augmented distillation (sample ladder, full-identity dedup, prompt-parity)
 
 ```bash
 pytest -q

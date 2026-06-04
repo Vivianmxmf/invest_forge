@@ -49,9 +49,13 @@ from invest_forge.tools.sentiment import build_sentiment  # noqa: E402
 # ─────────────────────────────────────────────────────────────────────────────
 # Page config
 # ─────────────────────────────────────────────────────────────────────────────
+_FAVICON_PATH = _ROOT / "assets" / "janus_favicon.png"
+
 st.set_page_config(
     page_title="JANUS · IF<GO>",
-    page_icon="⌖",
+    # Custom JANUS target favicon (32×32 PNG); falls back to ⌖ glyph if file
+    # is missing (e.g. trimmed deployment).
+    page_icon=str(_FAVICON_PATH) if _FAVICON_PATH.exists() else "⌖",
     layout="wide",
     # "auto" → Streamlit collapses the sidebar on narrow viewports (mobile),
     # keeps it expanded on desktop. Critical for mobile-responsive UX.
@@ -582,6 +586,9 @@ _OG_META = """
 <meta name="twitter:title" content="JANUS — Two-Faced AI Investment Terminal">
 <meta name="twitter:description" content="Multi-agent investment research · Bloomberg-Terminal UI · LangGraph + LoRA + RAG + alphalens">
 <meta name="twitter:image" content="https://raw.githubusercontent.com/Vivianmxmf/invest_forge/main/docs/screenshots/ui_terminal_decision.png">
+<!-- Apple touch icon: served from the GitHub raw CDN so iOS home-screen pinning shows the JANUS ⌖ target. -->
+<link rel="apple-touch-icon" href="https://raw.githubusercontent.com/Vivianmxmf/invest_forge/main/assets/janus_apple_touch.png">
+<link rel="shortcut icon" type="image/png" href="https://raw.githubusercontent.com/Vivianmxmf/invest_forge/main/assets/janus_favicon.png">
 """
 st.markdown(_OG_META, unsafe_allow_html=True)
 

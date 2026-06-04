@@ -1175,7 +1175,7 @@ def _pdf_report(state: dict, ts_code: str) -> bytes:
     c.drawString(40, height - 56, "AI INVESTMENT RESEARCH NOTE")
     c.setFont("Helvetica", 9)
     c.drawRightString(width - 40, height - 38,
-                      f"REPORT · {ts_code}  ·  WJH  ·  invest-forge.streamlit.app")
+                      f"REPORT · {ts_code}  ·  JANUS  ·  invest-forge.streamlit.app")
 
     # ── Rating badge ──
     y = height - 130
@@ -1301,7 +1301,7 @@ st.markdown(
   <div class="if-cell"><span class="if-dot ok"></span>DATA <b>{_DEPS.data_provider.name}</b></div>
   <div class="if-cell"><span class="if-dot ok"></span>SENTIMENT <b>{_DEPS.sentiment.name}</b></div>
   <div class="if-cell"><span class="if-dot {_v_state}"></span>VISION <b>{_v_label}</b></div>
-  <div class="if-cell">SESSION <b>WJH 2026-06</b></div>
+  <div class="if-cell">BUILD <b>v0.5.0</b></div>
   <a class="if-cell if-src" href="{GITHUB_URL}" target="_blank" rel="noopener">
     <span class="if-icon">⌥</span>VIEW&nbsp;SOURCE&nbsp;<b>GitHub</b>
   </a>

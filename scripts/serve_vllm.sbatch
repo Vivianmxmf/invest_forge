@@ -33,12 +33,12 @@ set -uo pipefail
 VLLM_ENV="${VLLM_ENV:-vllm}"
 MODEL="${MODEL:-Qwen/Qwen2.5-7B-Instruct}"
 ADAPTER_NAME="${ADAPTER_NAME:-investforge-analyst}"
-ADAPTER_PATH="${ADAPTER_PATH:-$HOME/invest_forge/models/adapters/investforge-analyst}"
+ADAPTER_PATH="${ADAPTER_PATH:-$HOME/janus_terminal/models/adapters/investforge-analyst}"
 PORT="${PORT:-8000}"
 MAX_LORA_RANK="${MAX_LORA_RANK:-16}"
 GPU_UTIL="${GPU_UTIL:-0.85}"
 MAX_LEN="${MAX_LEN:-4096}"
-CHAT_TEMPLATE="${CHAT_TEMPLATE:-$HOME/invest_forge/qwen2.5_chat_template.jinja}"
+CHAT_TEMPLATE="${CHAT_TEMPLATE:-$HOME/janus_terminal/qwen2.5_chat_template.jinja}"
 # JSON/guided-decoding backend. Default "outlines" pulls a broken pyairports
 # dependency in this env; lm-format-enforcer is already installed and needs no
 # outlines. The analyst/risk nodes use response_format=json, so this matters.

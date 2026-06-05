@@ -12,12 +12,12 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from invest_forge.agents.graph import GraphDeps  # noqa: E402
-from invest_forge.common.types import MacroContext, NewsItem  # noqa: E402
-from invest_forge.knowledge_base.retriever import HybridRetriever  # noqa: E402
-from invest_forge.llm.fake import FakeLLMClient  # noqa: E402
-from invest_forge.tools.data_tools import FakeDataProvider  # noqa: E402
-from invest_forge.tools.sentiment import LexiconSentiment  # noqa: E402
+from janus_terminal.agents.graph import GraphDeps  # noqa: E402
+from janus_terminal.common.types import MacroContext, NewsItem  # noqa: E402
+from janus_terminal.knowledge_base.retriever import HybridRetriever  # noqa: E402
+from janus_terminal.llm.fake import FakeLLMClient  # noqa: E402
+from janus_terminal.tools.data_tools import FakeDataProvider  # noqa: E402
+from janus_terminal.tools.sentiment import LexiconSentiment  # noqa: E402
 
 
 @pytest.fixture

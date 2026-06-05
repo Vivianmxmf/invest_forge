@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from invest_forge.agents.nodes import (
+from janus_terminal.agents.nodes import (
     _parse_json,
     make_analyst_node,
     make_data_fetcher_node,
@@ -14,8 +14,8 @@ from invest_forge.agents.nodes import (
     make_risk_control_node,
     should_revise,
 )
-from invest_forge.agents.state import empty_state
-from invest_forge.common.types import Rating
+from janus_terminal.agents.state import empty_state
+from janus_terminal.common.types import Rating
 
 
 @pytest.mark.unit
@@ -122,9 +122,9 @@ def test_should_revise_handles_string_booleans():
 def test_data_fetcher_boosts_matching_ticker_in_rag():
     """Codex round-4 P1: when the KB only carries the ts_code in metadata,
     the data_fetcher must rank the matching doc first."""
-    from invest_forge.knowledge_base.retriever import HybridRetriever
-    from invest_forge.tools.data_tools import FakeDataProvider
-    from invest_forge.tools.sentiment import LexiconSentiment
+    from janus_terminal.knowledge_base.retriever import HybridRetriever
+    from janus_terminal.tools.data_tools import FakeDataProvider
+    from janus_terminal.tools.sentiment import LexiconSentiment
 
     texts = [
         "公司是行业龙头, 营收稳健.",

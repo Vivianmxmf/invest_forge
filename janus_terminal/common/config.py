@@ -132,14 +132,14 @@ def get_settings() -> Settings:
     vector_store = VectorStoreConfig(
         url=os.getenv("QDRANT_URL", "http://localhost:6333"),
         api_key=os.getenv("QDRANT_API_KEY") or None,
-        collection=os.getenv("QDRANT_COLLECTION", "invest_forge_kb"),
+        collection=os.getenv("QDRANT_COLLECTION", "janus_terminal_kb"),
         embedding_model=os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5"),
         reranker_model=os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3"),
     )
     observability = ObservabilityConfig(
         langsmith_tracing=_bool("LANGCHAIN_TRACING_V2", False),
         langsmith_api_key=os.getenv("LANGCHAIN_API_KEY") or None,
-        langsmith_project=os.getenv("LANGCHAIN_PROJECT", "invest_forge"),
+        langsmith_project=os.getenv("LANGCHAIN_PROJECT", "janus_terminal"),
     )
     return Settings(
         llm=llm,

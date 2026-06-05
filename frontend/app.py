@@ -2,7 +2,7 @@
 
 Brand: JANUS — the two-faced Roman god, looking at the past (fundamentals
 / history / RAG) and the future (analyst forecast / target price). Python
-package keeps the internal name ``invest_forge`` for import stability.
+package keeps the internal name ``janus_terminal`` for import stability.
 
 Design language: deep-space black + amber accent + JetBrains Mono everywhere.
 Information-dense single-screen layout: status bar → sidebar command panel →
@@ -27,23 +27,23 @@ if str(_ROOT) not in sys.path:
 
 import streamlit as st  # noqa: E402
 
-from invest_forge.agents.graph import GraphDeps, run_pipeline_inline  # noqa: E402
-from invest_forge.api.main import _select_retriever  # noqa: E402
-from invest_forge.common.config import get_settings  # noqa: E402
-from invest_forge.llm.client import build_client, build_vision_client  # noqa: E402
-from invest_forge.tools.backtest_tools import (  # noqa: E402
+from janus_terminal.agents.graph import GraphDeps, run_pipeline_inline  # noqa: E402
+from janus_terminal.api.main import _select_retriever  # noqa: E402
+from janus_terminal.common.config import get_settings  # noqa: E402
+from janus_terminal.llm.client import build_client, build_vision_client  # noqa: E402
+from janus_terminal.tools.backtest_tools import (  # noqa: E402
     load_price_panel,
     make_lookahead_safe_signal,
     portfolio_long_short,
 )
-from invest_forge.tools.data_tools import build_provider  # noqa: E402
-from invest_forge.tools.image_input import (  # noqa: E402
+from janus_terminal.tools.data_tools import build_provider  # noqa: E402
+from janus_terminal.tools.image_input import (  # noqa: E402
     ImagePolicy,
     ImageRef,
     ImageValidationError,
     load_images,
 )
-from invest_forge.tools.sentiment import build_sentiment  # noqa: E402
+from janus_terminal.tools.sentiment import build_sentiment  # noqa: E402
 
 
 # ─────────────────────────────────────────────────────────────────────────────

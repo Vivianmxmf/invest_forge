@@ -10,26 +10,26 @@ import json
 from dataclasses import asdict
 from typing import Any, Callable
 
-from invest_forge.agents.prompts import (
+from janus_terminal.agents.prompts import (
     ANALYST_PROMPT,
     OUTPUT_PROMPT,
     RESEARCHER_PROMPT,
     RISK_CONTROL_PROMPT,
     VISION_PROMPT,
 )
-from invest_forge.agents.state import InvestState
-from invest_forge.common.logging_setup import get_logger
-from invest_forge.common.types import (
+from janus_terminal.agents.state import InvestState
+from janus_terminal.common.logging_setup import get_logger
+from janus_terminal.common.types import (
     MacroContext,
     NewsItem,
     Rating,
     RAGHit,
     RiskLevel,
 )
-from invest_forge.knowledge_base.retriever import HybridRetriever
-from invest_forge.llm.client import ChatMessage, LLMClient
-from invest_forge.tools.data_tools import DataProvider
-from invest_forge.tools.sentiment import Sentiment
+from janus_terminal.knowledge_base.retriever import HybridRetriever
+from janus_terminal.llm.client import ChatMessage, LLMClient
+from janus_terminal.tools.data_tools import DataProvider
+from janus_terminal.tools.sentiment import Sentiment
 
 logger = get_logger(__name__)
 

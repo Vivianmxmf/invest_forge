@@ -7,8 +7,8 @@ constructor runs — importing this module never requires torch to be installed.
 
 Usage (on GPU server):
 
-    from invest_forge.llm.hf_client import HFLLMClient
-    from invest_forge.llm.client import ChatMessage
+    from janus_terminal.llm.hf_client import HFLLMClient
+    from janus_terminal.llm.client import ChatMessage
 
     client = HFLLMClient(model="Qwen/Qwen2.5-7B-Instruct")
     resp = client.complete([ChatMessage(role="user", content="Hello")])
@@ -19,8 +19,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from invest_forge.common.logging_setup import get_logger
-from invest_forge.llm.client import ChatMessage, ChatResponse
+from janus_terminal.common.logging_setup import get_logger
+from janus_terminal.llm.client import ChatMessage, ChatResponse
 
 logger = get_logger(__name__)
 
@@ -155,7 +155,7 @@ class HFLLMClient:
         analyst prompt already instructs the model to emit JSON.  The agent's
         ``_parse_json`` logic is tolerant of minor deviations.
 
-        Returns a :class:`~invest_forge.llm.client.ChatResponse` with token
+        Returns a :class:`~janus_terminal.llm.client.ChatResponse` with token
         usage counts from the generation output.
         """
         import torch

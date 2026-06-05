@@ -1,13 +1,13 @@
 # Changelog
 
-All version-level changes to **JANUS** (Python package: `invest_forge`) are documented here.
+All version-level changes to **JANUS** (Python package: `janus_terminal`) are documented here.
 
 ## [0.5.0] - 2026-06-04
 
 ### Rebrand
 - Project renamed **InvestForge → JANUS** (the two-faced Roman god, looking at past
   data + future forecast — matches our data_fetcher + analyst duality).
-- Python package keeps the internal name `invest_forge` for import stability
+- Python package keeps the internal name `janus_terminal` for import stability
   (226 tests, 100+ imports across `frontend/` and `scripts/`).
 - All user-facing strings updated: page title, status bar brand (`⌖ JANUS · IF<GO>`),
   PDF report header, OG/Twitter meta cards, footer ASCII strip, 5-step tour title.
@@ -28,7 +28,7 @@ All version-level changes to **JANUS** (Python package: `invest_forge`) are docu
 - Why JANUS: short, mythic, Bloomberg-codename feel, perfectly matches our
   past-data + future-prediction duality. Also nods to Janus Henderson Investors
   (signal we're in the same arena as real institutional asset managers).
-- Why keep `invest_forge` Python package: rename would touch 100+ imports + 226
+- Why keep `janus_terminal` Python package: rename would touch 100+ imports + 226
   tests; not worth the regression risk for an internal name no user sees.
 - Why ⌖ glyph: aiming-reticle symbolism — two-faced god aims at past AND future
   targets simultaneously.
@@ -171,7 +171,7 @@ All version-level changes to **JANUS** (Python package: `invest_forge`) are docu
   `image_input.py` security layer and forwarded to a dedicated vision VLM
   for analysis before the researcher node runs.
 
-- **SSRF-hardened image validator:** `invest_forge/tools/image_input.py`
+- **SSRF-hardened image validator:** `janus_terminal/tools/image_input.py`
   provides `load_images(refs, policy) -> list[ValidatedImage]` with full
   threat mitigation: https-only scheme allowlist, IP-pinned fetching (no
   DNS-rebinding TOCTOU window), decompression-bomb guards (`max_bytes` before
@@ -252,7 +252,7 @@ All version-level changes to **JANUS** (Python package: `invest_forge`) are docu
 
 - **Per-node analyst routing:** `LLMConfig` gained a `local_analyst_model`
   field (env `LOCAL_ANALYST_MODEL`).  `build_analyst_client()` in
-  `invest_forge/llm/client.py` returns an `OpenAILLMClient` targeting the
+  `janus_terminal/llm/client.py` returns an `OpenAILLMClient` targeting the
   adapter name when `provider=local` and `local_analyst_model` is set;
   otherwise falls back to `build_client()` (no-op for `fake`/`openai`/
   `anthropic`).  `GraphDeps` gained an optional `analyst_client` field; when

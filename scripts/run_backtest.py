@@ -23,7 +23,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from invest_forge.tools.backtest_tools import (
+from janus_terminal.tools.backtest_tools import (
     build_factor_panel,
     load_price_panel,
     make_lookahead_safe_signal,
@@ -122,7 +122,7 @@ def main() -> None:
         logger.info("Factor observations: %d", len(factor))
 
         # Lazy import — only reached when --alphalens is passed.
-        from invest_forge.tools.backtest_tools import alphalens_report  # noqa: PLC0415
+        from janus_terminal.tools.backtest_tools import alphalens_report  # noqa: PLC0415
 
         out_png = Path(args.out_png) if args.out_png else None
         try:

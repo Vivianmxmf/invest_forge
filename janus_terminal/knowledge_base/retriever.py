@@ -18,7 +18,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
-from invest_forge.common.types import RAGHit
+from janus_terminal.common.types import RAGHit
 
 
 def _tokenize(text: str) -> list[str]:

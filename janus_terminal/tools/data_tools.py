@@ -12,9 +12,9 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Iterable, Protocol, runtime_checkable
 
-from invest_forge.common.config import get_settings
-from invest_forge.common.logging_setup import get_logger
-from invest_forge.common.types import FinancialMetrics, MacroContext, NewsItem
+from janus_terminal.common.config import get_settings
+from janus_terminal.common.logging_setup import get_logger
+from janus_terminal.common.types import FinancialMetrics, MacroContext, NewsItem
 
 logger = get_logger(__name__)
 

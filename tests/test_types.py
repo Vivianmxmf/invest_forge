@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from invest_forge.common.types import Rating, RiskLevel
+from janus_terminal.common.types import Rating, RiskLevel
 
 
 @pytest.mark.unit

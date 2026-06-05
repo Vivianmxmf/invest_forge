@@ -9,7 +9,7 @@
 #
 # What it does, in order:
 #   0. Pre-flight (OS / Python / conda / Docker / GPU / disk).
-#   1. Single conda env "invest_forge" (Python 3.11) — or venv fallback.
+#   1. Single conda env "janus_terminal" (Python 3.11) — or venv fallback.
 #   2. pip install -r requirements.txt.
 #   3. Materialise .env from .env.example (idempotent, generates secrets).
 #   4. Generate the synthetic sample dataset.
@@ -50,7 +50,7 @@ cd "$REPO_ROOT"
 cleanup() { rm -f "$REPO_ROOT/.env.bak" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
 
-ENV_NAME="invest_forge"
+ENV_NAME="janus_terminal"
 PY_VER="3.11"
 SUPPORTED_PYS=("3.11" "3.12" "3.10")
 
@@ -67,14 +67,14 @@ heading "0. Pre-flight"
 step "checking user"
 if [[ "$(id -u)" -eq 0 ]]; then
     fail "Running as root.  Refusing.  Re-run as your normal user."
-    [[ "${INVEST_FORGE_ALLOW_ROOT:-0}" != "1" ]] && exit 1
+    [[ "${janus_terminal_ALLOW_ROOT:-0}" != "1" ]] && exit 1
 fi
 ok "user=$(id -un) uid=$(id -u)"
 
 step "checking working dir"
-for must in requirements.txt scripts/generate_sample_data.py invest_forge/common/config.py; do
+for must in requirements.txt scripts/generate_sample_data.py janus_terminal/common/config.py; do
     if [[ ! -f "$must" ]]; then
-        fail "missing $must — are you in the invest_forge/ repo root?"
+        fail "missing $must — are you in the janus_terminal/ repo root?"
         exit 1
     fi
 done
@@ -135,13 +135,13 @@ if $USE_CONDA; then
         EXISTING_PY="$(conda run -n "$ENV_NAME" python -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null || echo none)"
         if [[ " ${SUPPORTED_PYS[*]} " == *" $EXISTING_PY "* ]]; then
             ok "conda env '$ENV_NAME' already exists (Python $EXISTING_PY) — reusing"
-        elif [[ "${INVEST_FORGE_REBUILD_ENV:-0}" == "1" ]]; then
-            note_warn "INVEST_FORGE_REBUILD_ENV=1 — removing existing '$ENV_NAME' (Python $EXISTING_PY)"
+        elif [[ "${janus_terminal_REBUILD_ENV:-0}" == "1" ]]; then
+            note_warn "janus_terminal_REBUILD_ENV=1 — removing existing '$ENV_NAME' (Python $EXISTING_PY)"
             conda env remove -y -n "$ENV_NAME"
             conda create -y -n "$ENV_NAME" "python=$PY_VER" pip
         else
             fail "existing env '$ENV_NAME' has Python $EXISTING_PY (need: ${SUPPORTED_PYS[*]})."
-            fail "Re-run with INVEST_FORGE_REBUILD_ENV=1 to recreate, or inspect first."
+            fail "Re-run with janus_terminal_REBUILD_ENV=1 to recreate, or inspect first."
             exit 1
         fi
     else
@@ -252,7 +252,7 @@ if command -v docker >/dev/null 2>&1; then
                     fi
                     sleep 1
                     if [[ $i -eq 30 ]]; then
-                        note_warn "Qdrant did not respond in 30s — check 'docker logs invest_forge_qdrant'"
+                        note_warn "Qdrant did not respond in 30s — check 'docker logs janus_terminal_qdrant'"
                     fi
                 done
             else

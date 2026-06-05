@@ -143,7 +143,7 @@ flowchart TD
 
 Every external dependency (LLM, vector store, data provider, sentiment
 model) sits behind a small Protocol so the *entire* pipeline runs offline
-against deterministic fakes — see `tests/` and `invest_forge/llm/fake.py`.
+against deterministic fakes — see `tests/` and `janus_terminal/llm/fake.py`.
 `USE_LANGGRAPH=true` swaps the in-process inline runner for the compiled
 LangGraph runtime (which is also what lets LangSmith capture traces).
 
@@ -152,8 +152,8 @@ LangGraph runtime (which is also what lets LangSmith capture traces).
 ## Layout
 
 ```
-invest_forge/
-├── invest_forge/
+janus_terminal/
+├── janus_terminal/
 │   ├── agents/                    # state · nodes · graph · prompts
 │   ├── common/                    # config · logging · types
 │   ├── eval/                      # ragas_eval · quality
@@ -162,7 +162,7 @@ invest_forge/
 │   └── tools/                     # data · sentiment · rag · backtest · image_input (vision security)
 ├── finetune/                      # QLoRA: sft_format · train_lora · eval_lora
 ├── frontend/                      # Streamlit dashboard (with image upload)
-├── api/                           # (inside invest_forge/api/) FastAPI
+├── api/                           # (inside janus_terminal/api/) FastAPI
 ├── notebooks/                     # Week 1 / 3 / 4 walkthroughs
 ├── configs/lora.yaml              # QLoRA hyperparameters
 ├── scripts/                       # generate_sample_data · build_kb · build_sft_dataset · serve_vllm.sbatch · analyze_client.sh
@@ -202,7 +202,7 @@ pip install -r requirements-gpu.txt \
     --extra-index-url https://download.pytorch.org/whl/cu121
 
 # After it finishes:
-#   • conda env 'invest_forge' (Py 3.11)
+#   • conda env 'janus_terminal' (Py 3.11)
 #   • core deps + GPU stack (gated on nvidia-smi) installed
 #   • Qdrant running on :6333
 #   • .env scaffolded — fill OPENAI_API_KEY / ANTHROPIC_API_KEY / TUSHARE_TOKEN
@@ -224,7 +224,7 @@ On a **Docker host**: `docker compose --profile vllm up -d`.
 
 On a **SLURM cluster** (no Docker / no sudo), serve via the bundled job
 script — run vLLM in its **own conda env** (it pins its own torch /
-transformers, so it must not share the `invest_forge` training env):
+transformers, so it must not share the `janus_terminal` training env):
 
 ```bash
 # one-time: a dedicated serving env

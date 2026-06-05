@@ -17,14 +17,14 @@ from io import BytesIO
 
 import pytest
 
-from invest_forge.agents.graph import GraphDeps, run_pipeline_inline
-from invest_forge.agents.nodes import make_researcher_node, make_vision_node
-from invest_forge.agents.prompts import RESEARCHER_PROMPT, VISION_PROMPT
-from invest_forge.agents.state import empty_state
-from invest_forge.common.config import LLMConfig
-from invest_forge.llm.client import ChatMessage, build_vision_client
-from invest_forge.llm.fake import FakeLLMClient
-from invest_forge.llm.openai_client import _to_openai_messages
+from janus_terminal.agents.graph import GraphDeps, run_pipeline_inline
+from janus_terminal.agents.nodes import make_researcher_node, make_vision_node
+from janus_terminal.agents.prompts import RESEARCHER_PROMPT, VISION_PROMPT
+from janus_terminal.agents.state import empty_state
+from janus_terminal.common.config import LLMConfig
+from janus_terminal.llm.client import ChatMessage, build_vision_client
+from janus_terminal.llm.fake import FakeLLMClient
+from janus_terminal.llm.openai_client import _to_openai_messages
 
 
 # ---------------------------------------------------------------------------
@@ -303,7 +303,7 @@ def test_build_vision_client_returns_client_when_local_vision_model_set():
     """
     from unittest.mock import patch
 
-    from invest_forge.llm.openai_client import OpenAILLMClient
+    from janus_terminal.llm.openai_client import OpenAILLMClient
 
     cfg = LLMConfig(
         provider="local",
@@ -317,7 +317,7 @@ def test_build_vision_client_returns_client_when_local_vision_model_set():
         local_vision_base_url="http://localhost:8002/v1",
     )
     # Patch OpenAI SDK so __post_init__ doesn't fail without the package.
-    with patch("invest_forge.llm.openai_client.OpenAILLMClient.__post_init__"):
+    with patch("janus_terminal.llm.openai_client.OpenAILLMClient.__post_init__"):
         client = build_vision_client(cfg)
 
     assert client is not None
@@ -331,7 +331,7 @@ def test_build_vision_client_falls_back_to_local_base_url_when_vision_base_url_a
     """When local_vision_base_url is None, fall back to local_base_url."""
     from unittest.mock import patch
 
-    from invest_forge.llm.openai_client import OpenAILLMClient
+    from janus_terminal.llm.openai_client import OpenAILLMClient
 
     cfg = LLMConfig(
         provider="local",
@@ -344,7 +344,7 @@ def test_build_vision_client_falls_back_to_local_base_url_when_vision_base_url_a
         local_vision_model="Qwen/Qwen2.5-VL-7B-Instruct",
         local_vision_base_url=None,
     )
-    with patch("invest_forge.llm.openai_client.OpenAILLMClient.__post_init__"):
+    with patch("janus_terminal.llm.openai_client.OpenAILLMClient.__post_init__"):
         client = build_vision_client(cfg)
 
     assert isinstance(client, OpenAILLMClient)
@@ -361,7 +361,7 @@ def test_api_invalid_image_returns_400():
     """A URL pointing to a private/loopback host must return HTTP 400."""
     from fastapi.testclient import TestClient
 
-    from invest_forge.api.main import app
+    from janus_terminal.api.main import app
 
     with TestClient(app) as client:
         resp = client.post(
@@ -384,7 +384,7 @@ def test_api_valid_base64_image_returns_200(monkeypatch):
     # Encode a real tiny PNG.
     b64 = base64.b64encode(_TINY_PNG).decode("ascii")
 
-    from invest_forge.api.main import app
+    from janus_terminal.api.main import app
 
     with TestClient(app) as client:
         resp = client.post(

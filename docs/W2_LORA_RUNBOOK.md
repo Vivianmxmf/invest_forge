@@ -37,7 +37,7 @@ pip install -r requirements-gpu.txt \
 ```
 
 `server_migrate.sh` is idempotent — safe to re-run.  It:
-- Creates / reuses the `invest_forge` conda env (Python 3.11).
+- Creates / reuses the `janus_terminal` conda env (Python 3.11).
 - Installs `requirements.txt` (CPU deps).
 - Scaffolds `.env` from `.env.example`.
 - Brings up Qdrant via Docker.

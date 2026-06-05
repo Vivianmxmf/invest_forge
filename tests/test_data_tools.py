@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from invest_forge.tools.data_tools import FakeDataProvider, fetch_for_codes
+from janus_terminal.tools.data_tools import FakeDataProvider, fetch_for_codes
 
 
 @pytest.mark.unit
@@ -48,8 +48,8 @@ def test_composite_provider_falls_back_for_macro():
     NotImplementedError and fall back to the fake macro source.
     (Codex review round-1 P1.)
     """
-    from invest_forge.common.types import FinancialMetrics, MacroContext
-    from invest_forge.tools.data_tools import CompositeProvider
+    from janus_terminal.common.types import FinancialMetrics, MacroContext
+    from janus_terminal.tools.data_tools import CompositeProvider
 
     class FakePrimary:
         name = "primary"
@@ -77,7 +77,7 @@ def test_composite_provider_falls_back_for_macro():
 def test_sample_fundamentals_match_kb_excerpt():
     """Sample revenue must match the KB markdown ('432 亿元' = 4.32e10).
     (Codex review round-1 P2.)"""
-    from invest_forge.common.config import get_settings
+    from janus_terminal.common.config import get_settings
 
     settings = get_settings()
     if not (settings.paths.sample_dir / "fundamentals.json").exists():

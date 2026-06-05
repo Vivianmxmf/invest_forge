@@ -73,7 +73,7 @@ Expected: JSON listing `Qwen/Qwen2.5-VL-7B-Instruct`.
 
 ```bash
 # Ensure .env is populated with vision vars, then:
-make api          # or: uvicorn invest_forge.api.main:app --port 8001
+make api          # or: uvicorn janus_terminal.api.main:app --port 8001
 ```
 
 The startup log will show:

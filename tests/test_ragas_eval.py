@@ -16,7 +16,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from invest_forge.eval.ragas_eval import RagasReport, stub_evaluate
+from janus_terminal.eval.ragas_eval import RagasReport, stub_evaluate
 
 # ---------------------------------------------------------------------------
 # locate the committed eval set
@@ -37,7 +37,7 @@ def test_evaluate_ragas_length_mismatch_raises() -> None:
     This check runs before the lazy ragas import, so it works even when ragas
     is not installed.
     """
-    from invest_forge.eval.ragas_eval import evaluate_ragas
+    from janus_terminal.eval.ragas_eval import evaluate_ragas
 
     with pytest.raises(ValueError, match="equal length"):
         evaluate_ragas(
@@ -51,7 +51,7 @@ def test_evaluate_ragas_length_mismatch_raises() -> None:
 @pytest.mark.unit
 def test_evaluate_ragas_unknown_metric_raises() -> None:
     """An unknown metric name must raise before the lazy ragas import."""
-    from invest_forge.eval.ragas_eval import evaluate_ragas
+    from janus_terminal.eval.ragas_eval import evaluate_ragas
 
     with pytest.raises(ValueError, match="unknown RAGAS metric"):
         evaluate_ragas(
@@ -72,7 +72,7 @@ def test_to_scalar_reduces_lists_nan_safe() -> None:
     """
     import math
 
-    from invest_forge.eval.ragas_eval import _to_scalar
+    from janus_terminal.eval.ragas_eval import _to_scalar
 
     assert _to_scalar([0.6, 0.8, 1.0]) == pytest.approx(0.8)
     # NaN entries (failed jobs) are dropped from the mean.
@@ -91,7 +91,7 @@ def test_to_scalar_reduces_lists_nan_safe() -> None:
 @pytest.mark.unit
 def test_default_metrics_exclude_answer_relevancy() -> None:
     """The chat-only default must omit answer_relevancy (it needs embeddings)."""
-    from invest_forge.eval.ragas_eval import DEFAULT_METRICS
+    from janus_terminal.eval.ragas_eval import DEFAULT_METRICS
 
     assert "answer_relevancy" not in DEFAULT_METRICS
     assert "faithfulness" in DEFAULT_METRICS
@@ -199,13 +199,13 @@ def test_runner_threshold_gate() -> None:
 def _patch_runner_real_path(monkeypatch: pytest.MonkeyPatch, report: RagasReport) -> None:
     """Stub the runner's lazy-imported real-path deps so main() runs offline.
 
-    main() does ``from invest_forge.eval.ragas_eval import build_ragas_judge,
-    evaluate_ragas`` and ``from invest_forge.common.config import get_settings``
+    main() does ``from janus_terminal.eval.ragas_eval import build_ragas_judge,
+    evaluate_ragas`` and ``from janus_terminal.common.config import get_settings``
     AT CALL TIME, so patching the attributes on the SOURCE modules is picked up
     when main() resolves the from-import — no real ragas/langchain needed.
     """
-    import invest_forge.common.config as cfg_mod
-    import invest_forge.eval.ragas_eval as ragas_mod
+    import janus_terminal.common.config as cfg_mod
+    import janus_terminal.eval.ragas_eval as ragas_mod
 
     monkeypatch.setattr(ragas_mod, "evaluate_ragas", lambda **_kw: report)
     monkeypatch.setattr(ragas_mod, "build_ragas_judge", lambda _settings=None: (object(), object()))

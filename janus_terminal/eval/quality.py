@@ -15,8 +15,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from invest_forge.common.logging_setup import get_logger
-from invest_forge.llm.client import ChatMessage, LLMClient
+from janus_terminal.common.logging_setup import get_logger
+from janus_terminal.llm.client import ChatMessage, LLMClient
 
 logger = get_logger(__name__)
 

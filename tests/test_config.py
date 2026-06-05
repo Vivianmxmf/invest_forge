@@ -5,7 +5,7 @@ import importlib
 
 import pytest
 
-import invest_forge.common.config as config_module
+import janus_terminal.common.config as config_module
 
 
 @pytest.mark.unit

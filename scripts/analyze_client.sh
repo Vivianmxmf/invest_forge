@@ -13,12 +13,12 @@ set -uo pipefail
 TS="${1:-688981.SH}"
 VLLM_PORT="${VLLM_PORT:-8000}"
 API_PORT="${API_PORT:-8001}"
-IF_ENV="${IF_ENV:-invest_forge}"
+IF_ENV="${IF_ENV:-janus_terminal}"
 
 # shellcheck disable=SC1091
 source "$HOME/anaconda3/etc/profile.d/conda.sh"
 conda activate "$IF_ENV"
-cd "$HOME/invest_forge"
+cd "$HOME/janus_terminal"
 
 # Point the agent layer at the self-hosted vLLM endpoint.
 export LLM_PROVIDER=local
@@ -35,7 +35,7 @@ if ! curl -fsS "http://localhost:${VLLM_PORT}/v1/models" >/dev/null 2>&1; then
 fi
 
 echo "starting FastAPI on :${API_PORT} ..."
-uvicorn invest_forge.api.main:app --host 0.0.0.0 --port "$API_PORT" >/tmp/if_api_${API_PORT}.log 2>&1 &
+uvicorn janus_terminal.api.main:app --host 0.0.0.0 --port "$API_PORT" >/tmp/if_api_${API_PORT}.log 2>&1 &
 API_PID=$!
 trap 'kill "$API_PID" 2>/dev/null || true' EXIT INT TERM
 

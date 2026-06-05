@@ -48,16 +48,16 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from invest_forge.agents.nodes import (
+from janus_terminal.agents.nodes import (
     make_data_fetcher_node,
     make_researcher_node,
 )
-from invest_forge.agents.state import empty_state
-from invest_forge.common.config import LLMConfig, get_settings
-from invest_forge.common.types import Rating
-from invest_forge.llm.client import ChatMessage, LLMClient, build_client
-from invest_forge.tools.data_tools import DataProvider, FakeDataProvider
-from invest_forge.tools.sentiment import LexiconSentiment
+from janus_terminal.agents.state import empty_state
+from janus_terminal.common.config import LLMConfig, get_settings
+from janus_terminal.common.types import Rating
+from janus_terminal.llm.client import ChatMessage, LLMClient, build_client
+from janus_terminal.tools.data_tools import DataProvider, FakeDataProvider
+from janus_terminal.tools.sentiment import LexiconSentiment
 from finetune.sft_format import SFTExample, build_analyst_user_prompt, to_chat_example, write_jsonl
 
 logger = logging.getLogger(__name__)
@@ -499,7 +499,7 @@ def build_dataset(
     settings = get_settings()
     use_real = effective_provider != "fake" and bool(settings.tushare_token)
     if use_real:
-        from invest_forge.tools.data_tools import build_provider
+        from janus_terminal.tools.data_tools import build_provider
         data_provider: DataProvider = build_provider(prefer_real=True)
         logger.info("Data provider: %s", data_provider.name)
     else:

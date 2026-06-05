@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from invest_forge.tools.backtest_tools import (
+from janus_terminal.tools.backtest_tools import (
     build_factor_panel,
     load_price_panel,
     make_lookahead_safe_signal,

@@ -33,7 +33,7 @@ def configure_logging(
     log_level = getattr(logging, level_name, logging.INFO)
 
     root = logging.getLogger()
-    if getattr(root, "_invest_forge_configured", False):
+    if getattr(root, "_janus_terminal_configured", False):
         return
 
     root.setLevel(log_level)
@@ -58,10 +58,10 @@ def configure_logging(
     for noisy in ("urllib3", "httpx", "matplotlib.font_manager", "qdrant_client"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
-    root._invest_forge_configured = True  # type: ignore[attr-defined]
+    root._janus_terminal_configured = True  # type: ignore[attr-defined]
 
 
 def get_logger(name: str) -> logging.Logger:
-    if not getattr(logging.getLogger(), "_invest_forge_configured", False):
+    if not getattr(logging.getLogger(), "_janus_terminal_configured", False):
         configure_logging()
     return logging.getLogger(name)

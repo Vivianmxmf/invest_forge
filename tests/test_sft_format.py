@@ -19,7 +19,7 @@ from finetune.sft_format import (
     to_chat_example,
     write_jsonl,
 )
-from invest_forge.agents.prompts import ANALYST_PROMPT
+from janus_terminal.agents.prompts import ANALYST_PROMPT
 
 
 @pytest.mark.unit

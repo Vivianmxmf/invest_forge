@@ -5,8 +5,8 @@ import json
 
 import pytest
 
-from invest_forge.llm.client import ChatMessage
-from invest_forge.llm.fake import FakeLLMClient, with_handlers
+from janus_terminal.llm.client import ChatMessage
+from janus_terminal.llm.fake import FakeLLMClient, with_handlers
 
 
 @pytest.mark.unit

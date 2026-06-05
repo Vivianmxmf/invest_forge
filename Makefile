@@ -7,7 +7,7 @@ PYTEST  := $(VENV)/bin/pytest
 BLACK   := $(VENV)/bin/black
 RUFF    := $(VENV)/bin/ruff
 MYPY    := $(VENV)/bin/mypy
-SRC     := invest_forge tests frontend scripts
+SRC     := janus_terminal tests frontend scripts
 
 .PHONY: help venv install dev-install fmt lint type test cov sample \
         qdrant-up qdrant-down build-kb dashboard api clean
@@ -49,13 +49,13 @@ lint:
 	$(BLACK) --check $(SRC)
 
 type:
-	$(MYPY) invest_forge
+	$(MYPY) janus_terminal
 
 test:
 	$(PYTEST) -m "unit or not integration"
 
 cov:
-	$(PYTEST) --cov=invest_forge --cov-report=term-missing --cov-report=html
+	$(PYTEST) --cov=janus_terminal --cov-report=term-missing --cov-report=html
 
 sample:
 	$(PY) scripts/generate_sample_data.py
@@ -73,7 +73,7 @@ dashboard:
 	$(VENV)/bin/streamlit run frontend/app.py
 
 api:
-	$(VENV)/bin/uvicorn invest_forge.api.main:app --host 0.0.0.0 --port 8001
+	$(VENV)/bin/uvicorn janus_terminal.api.main:app --host 0.0.0.0 --port 8001
 
 clean:
 	rm -rf .pytest_cache .ruff_cache .mypy_cache htmlcov .coverage

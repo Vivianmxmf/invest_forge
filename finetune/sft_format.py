@@ -3,7 +3,7 @@
 Key design principle: ``build_analyst_user_prompt`` is the *single source of
 truth* for the analyst user message.  It mirrors the exact truncation and
 ``str.format`` call made by ``make_analyst_node`` in
-``invest_forge/agents/nodes.py`` so that train-time examples are byte-identical
+``janus_terminal/agents/nodes.py`` so that train-time examples are byte-identical
 to inference-time inputs.
 """
 from __future__ import annotations
@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from invest_forge.agents.prompts import ANALYST_PROMPT
+from janus_terminal.agents.prompts import ANALYST_PROMPT
 
 # ---------------------------------------------------------------------------
 # NOTE on train/serve parity: inference (``make_analyst_node``) sends EXACTLY

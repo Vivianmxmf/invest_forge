@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-from invest_forge.common.logging_setup import get_logger
+from janus_terminal.common.logging_setup import get_logger
 
 logger = get_logger(__name__)
 

@@ -13,17 +13,17 @@ import pytest
 # not the bare namespace — a partial/namespace-only install must still skip.
 pytest.importorskip("langgraph.graph")
 
-from invest_forge.agents.graph import (  # noqa: E402
+from janus_terminal.agents.graph import (  # noqa: E402
     GraphDeps,
     _initial_state,
     build_invest_graph,
     run_pipeline_graph,
     run_pipeline_inline,
 )
-from invest_forge.common.types import Rating  # noqa: E402
-from invest_forge.llm.fake import FakeLLMClient  # noqa: E402
-from invest_forge.tools.data_tools import FakeDataProvider  # noqa: E402
-from invest_forge.tools.sentiment import LexiconSentiment  # noqa: E402
+from janus_terminal.common.types import Rating  # noqa: E402
+from janus_terminal.llm.fake import FakeLLMClient  # noqa: E402
+from janus_terminal.tools.data_tools import FakeDataProvider  # noqa: E402
+from janus_terminal.tools.sentiment import LexiconSentiment  # noqa: E402
 
 
 @pytest.fixture

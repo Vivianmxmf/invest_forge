@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from invest_forge.common.logging_setup import get_logger
-from invest_forge.llm.client import ChatMessage, ChatResponse
+from janus_terminal.common.logging_setup import get_logger
+from janus_terminal.llm.client import ChatMessage, ChatResponse
 
 logger = get_logger(__name__)
 

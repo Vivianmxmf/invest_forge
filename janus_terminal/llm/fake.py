@@ -16,7 +16,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Callable, Union
 
-from invest_forge.llm.client import ChatMessage, ChatResponse
+from janus_terminal.llm.client import ChatMessage, ChatResponse
 
 Responder = Union[str, Callable[[list[ChatMessage]], str]]
 

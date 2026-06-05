@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from invest_forge.knowledge_base.builder import ChunkingConfig, build_in_memory, chunks_from_documents
-from invest_forge.knowledge_base.pdf_loader import LoadedDocument, load_markdown
-from invest_forge.knowledge_base.retriever import HybridRetriever
+from janus_terminal.knowledge_base.builder import ChunkingConfig, build_in_memory, chunks_from_documents
+from janus_terminal.knowledge_base.pdf_loader import LoadedDocument, load_markdown
+from janus_terminal.knowledge_base.retriever import HybridRetriever
 
 
 @pytest.mark.unit

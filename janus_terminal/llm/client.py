@@ -9,8 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
-from invest_forge.common.config import LLMConfig, get_settings
-from invest_forge.common.logging_setup import get_logger
+from janus_terminal.common.config import LLMConfig, get_settings
+from janus_terminal.common.logging_setup import get_logger
 
 logger = get_logger(__name__)
 
@@ -53,20 +53,20 @@ def build_client(config: LLMConfig | None = None) -> LLMClient:
     cfg = config or get_settings().llm
     provider = cfg.provider.lower()
     if provider == "fake":
-        from invest_forge.llm.fake import FakeLLMClient
+        from janus_terminal.llm.fake import FakeLLMClient
 
         logger.info("LLM provider = fake (offline mode)")
         return FakeLLMClient()
     if provider == "openai":
-        from invest_forge.llm.openai_client import OpenAILLMClient
+        from janus_terminal.llm.openai_client import OpenAILLMClient
 
         return OpenAILLMClient(model=cfg.model, api_key=cfg.openai_api_key, temperature=cfg.temperature)
     if provider == "anthropic":
-        from invest_forge.llm.anthropic_client import AnthropicLLMClient
+        from janus_terminal.llm.anthropic_client import AnthropicLLMClient
 
         return AnthropicLLMClient(model=cfg.model, api_key=cfg.anthropic_api_key, temperature=cfg.temperature)
     if provider == "local":
-        from invest_forge.llm.openai_client import OpenAILLMClient
+        from janus_terminal.llm.openai_client import OpenAILLMClient
 
         # vLLM exposes an OpenAI-compatible endpoint
         if not cfg.local_base_url:
@@ -78,7 +78,7 @@ def build_client(config: LLMConfig | None = None) -> LLMClient:
             temperature=cfg.temperature,
         )
     if provider in ("hf", "huggingface", "transformers"):
-        from invest_forge.llm.hf_client import HFLLMClient
+        from janus_terminal.llm.hf_client import HFLLMClient
 
         logger.info("LLM provider = hf (in-process HuggingFace model: %s)", cfg.model)
         return HFLLMClient(
@@ -103,7 +103,7 @@ def build_vision_client(cfg: LLMConfig) -> LLMClient | None:
     """
     if cfg.provider.lower() != "local" or not cfg.local_vision_model:
         return None
-    from invest_forge.llm.openai_client import OpenAILLMClient
+    from janus_terminal.llm.openai_client import OpenAILLMClient
 
     base_url = cfg.local_vision_base_url or cfg.local_base_url
     logger.info(
@@ -130,7 +130,7 @@ def build_analyst_client(config: LLMConfig | None = None) -> LLMClient:
     """
     cfg = config or get_settings().llm
     if cfg.provider.lower() == "local" and cfg.local_analyst_model:
-        from invest_forge.llm.openai_client import OpenAILLMClient
+        from janus_terminal.llm.openai_client import OpenAILLMClient
 
         if not cfg.local_base_url:
             raise ValueError("LLM_PROVIDER=local requires LOCAL_LLM_BASE_URL")

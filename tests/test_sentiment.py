@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from invest_forge.tools.sentiment import LexiconSentiment
+from janus_terminal.tools.sentiment import LexiconSentiment
 
 
 @pytest.mark.unit

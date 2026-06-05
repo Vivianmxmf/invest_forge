@@ -27,7 +27,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from invest_forge.eval.ragas_eval import RagasReport, stub_evaluate
+from janus_terminal.eval.ragas_eval import RagasReport, stub_evaluate
 
 logger = logging.getLogger(__name__)
 
@@ -203,8 +203,8 @@ def main(argv: list[str] | None = None) -> None:
     else:
         # Real RAGAS path — lazy imports so this script stays importable without
         # ragas/langchain installed (offline laptop environment).
-        from invest_forge.common.config import get_settings
-        from invest_forge.eval.ragas_eval import build_ragas_judge, evaluate_ragas
+        from janus_terminal.common.config import get_settings
+        from janus_terminal.eval.ragas_eval import build_ragas_judge, evaluate_ragas
 
         logger.info("Building RAGAS judge from settings")
         judge_llm, judge_emb = build_ragas_judge(get_settings())

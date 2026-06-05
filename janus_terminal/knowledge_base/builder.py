@@ -13,9 +13,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable
 
-from invest_forge.common.logging_setup import get_logger
-from invest_forge.knowledge_base.pdf_loader import LoadedDocument, iter_directory
-from invest_forge.knowledge_base.retriever import HybridRetriever
+from janus_terminal.common.logging_setup import get_logger
+from janus_terminal.knowledge_base.pdf_loader import LoadedDocument, iter_directory
+from janus_terminal.knowledge_base.retriever import HybridRetriever
 
 logger = get_logger(__name__)
 

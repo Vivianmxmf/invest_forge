@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from invest_forge.agents.nodes import (
+from janus_terminal.agents.nodes import (
     make_analyst_node,
     make_data_fetcher_node,
     make_output_node,
@@ -18,11 +18,11 @@ from invest_forge.agents.nodes import (
     make_vision_node,
     should_revise,
 )
-from invest_forge.agents.state import InvestState, empty_state
-from invest_forge.knowledge_base.retriever import HybridRetriever
-from invest_forge.llm.client import LLMClient
-from invest_forge.tools.data_tools import DataProvider
-from invest_forge.tools.sentiment import Sentiment
+from janus_terminal.agents.state import InvestState, empty_state
+from janus_terminal.knowledge_base.retriever import HybridRetriever
+from janus_terminal.llm.client import LLMClient
+from janus_terminal.tools.data_tools import DataProvider
+from janus_terminal.tools.sentiment import Sentiment
 
 
 @dataclass

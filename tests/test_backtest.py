@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from invest_forge.tools.backtest_tools import (
+from janus_terminal.tools.backtest_tools import (
     make_lookahead_safe_signal,
     portfolio_long_short,
     run_simple_backtest,

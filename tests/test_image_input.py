@@ -1,4 +1,4 @@
-"""Tests for invest_forge/tools/image_input.py — all offline / network-free.
+"""Tests for janus_terminal/tools/image_input.py — all offline / network-free.
 
 TDD: these tests were written FIRST; the implementation follows.
 
@@ -66,7 +66,7 @@ def _raw_b64_png(width: int = 2, height: int = 2) -> str:
 # Import the module under test (will fail until image_input.py exists)
 # ---------------------------------------------------------------------------
 
-from invest_forge.tools.image_input import (  # noqa: E402
+from janus_terminal.tools.image_input import (  # noqa: E402
     ImagePolicy,
     ImageRef,
     ImageValidationError,

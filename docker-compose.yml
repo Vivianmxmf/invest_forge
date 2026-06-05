@@ -1,4 +1,4 @@
-name: invest_forge
+name: janus_terminal
 
 # Profiles:
 #   --profile rag        only Qdrant
@@ -12,7 +12,7 @@ services:
     # ``docker compose --profile vllm up -d`` provides both the LLM endpoint
     # AND the vector store the API needs to read from.
     profiles: [rag, vllm, all]
-    container_name: invest_forge_qdrant
+    container_name: janus_terminal_qdrant
     restart: unless-stopped
     ports:
       # Bind to loopback by default; override QDRANT_BIND for remote access.
@@ -31,7 +31,7 @@ services:
     # v0.6.x added robust multi-LoRA serving via --enable-lora.
     image: vllm/vllm-openai:v0.6.3
     profiles: [vllm, all]
-    container_name: invest_forge_vllm
+    container_name: janus_terminal_vllm
     restart: unless-stopped
     env_file:
       - .env
@@ -86,7 +86,7 @@ services:
     # bump as needed — verify the model loads via `curl :8002/v1/models`.
     image: vllm/vllm-openai:v0.7.3
     profiles: [vllm, all]
-    container_name: invest_forge_vllm_vision
+    container_name: janus_terminal_vllm_vision
     restart: unless-stopped
     env_file:
       - .env

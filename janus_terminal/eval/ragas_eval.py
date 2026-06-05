@@ -178,7 +178,7 @@ def build_ragas_judge(settings: Any = None) -> tuple[Any, Any]:  # pragma: no co
     """
     import os
 
-    from invest_forge.common.config import get_settings as _get_settings
+    from janus_terminal.common.config import get_settings as _get_settings
 
     resolved = settings or _get_settings()
     cfg = resolved.llm

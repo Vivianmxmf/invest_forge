@@ -58,10 +58,10 @@ def main() -> None:
     # These imports are langgraph-free (build_invest_graph imports langgraph
     # lazily inside its own body, so importing it here does NOT require the
     # package — the ImportError only fires when we CALL it below).
-    from invest_forge.agents.graph import GraphDeps, build_invest_graph, _initial_state
-    from invest_forge.llm.fake import FakeLLMClient
-    from invest_forge.tools.data_tools import FakeDataProvider
-    from invest_forge.tools.sentiment import LexiconSentiment
+    from janus_terminal.agents.graph import GraphDeps, build_invest_graph, _initial_state
+    from janus_terminal.llm.fake import FakeLLMClient
+    from janus_terminal.tools.data_tools import FakeDataProvider
+    from janus_terminal.tools.sentiment import LexiconSentiment
 
     deps = GraphDeps(
         llm=FakeLLMClient(),

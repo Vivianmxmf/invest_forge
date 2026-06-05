@@ -31,10 +31,10 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from finetune.sft_format import build_analyst_user_prompt, read_jsonl
-from invest_forge.common.types import Rating
-from invest_forge.llm.client import ChatMessage, ChatResponse
-from invest_forge.llm.fake import FakeLLMClient
-from invest_forge.tools.data_tools import FakeDataProvider
+from janus_terminal.common.types import Rating
+from janus_terminal.llm.client import ChatMessage, ChatResponse
+from janus_terminal.llm.fake import FakeLLMClient
+from janus_terminal.tools.data_tools import FakeDataProvider
 from scripts.build_sft_dataset import (
     _dedup_examples,
     _run_pipeline_for_ticker,
@@ -297,7 +297,7 @@ def test_user_content_matches_analyst_prompt(
         user_content = next(m["content"] for m in row["messages"] if m["role"] == "user")
         # Extract the memo from the user content by checking it starts with
         # the known prefix from ANALYST_PROMPT.
-        from invest_forge.agents.prompts import ANALYST_PROMPT
+        from janus_terminal.agents.prompts import ANALYST_PROMPT
         # The user content must be a valid ANALYST_PROMPT.format(...) output.
         assert "[分析师]" in user_content or "[Analyst]" in user_content, (
             "User content does not look like ANALYST_PROMPT output"
@@ -361,9 +361,9 @@ def test_user_content_exact_parity_with_build_analyst_user_prompt() -> None:
     """The user message in an SFTExample must be byte-identical to
     build_analyst_user_prompt(memo) — no intermediate reformatting."""
     from scripts.build_sft_dataset import _run_pipeline_for_ticker
-    from invest_forge.agents.nodes import make_data_fetcher_node, make_researcher_node
-    from invest_forge.agents.state import empty_state
-    from invest_forge.tools.sentiment import LexiconSentiment
+    from janus_terminal.agents.nodes import make_data_fetcher_node, make_researcher_node
+    from janus_terminal.agents.state import empty_state
+    from janus_terminal.tools.sentiment import LexiconSentiment
 
     teacher = FakeLLMClient()
     provider = FakeDataProvider()

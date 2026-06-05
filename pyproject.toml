@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "invest-forge"
+name = "janus-terminal"
 version = "0.1.0"
 description = "AI-driven subjective investment research assistant — LangGraph Multi-Agent + Hybrid RAG."
 readme = "README.md"
@@ -18,7 +18,7 @@ Repository = "https://github.com/Vivianmxmf/janus-terminal"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["invest_forge*"]
+include = ["janus_terminal*"]
 exclude = ["tests*", "notebooks*", "frontend*", "scripts*", "configs*"]
 
 [tool.black]
@@ -38,7 +38,7 @@ ignore = ["E501"]
 "tests/*" = ["N802", "N803"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["invest_forge"]
+known-first-party = ["janus_terminal"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -64,7 +64,7 @@ filterwarnings = [
 
 [tool.coverage.run]
 branch = true
-source = ["invest_forge"]
+source = ["janus_terminal"]
 omit = ["tests/*", "*/__init__.py"]
 
 [tool.coverage.report]

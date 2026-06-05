@@ -2,7 +2,7 @@
 
 All tests are network-free and do NOT require torch or transformers.
 They verify:
-  - invest_forge.llm.hf_client imports cleanly without torch installed.
+  - janus_terminal.llm.hf_client imports cleanly without torch installed.
   - build_client dispatches to HFLLMClient (or a clear non-"unsupported" path)
     for the "hf", "huggingface", and "transformers" provider aliases.
   - LLMConfig exposes hf_device / hf_dtype with correct defaults.
@@ -15,7 +15,7 @@ import sys
 
 import pytest
 
-import invest_forge.common.config as config_module
+import janus_terminal.common.config as config_module
 
 
 # ---------------------------------------------------------------------------
@@ -25,17 +25,17 @@ import invest_forge.common.config as config_module
 
 @pytest.mark.unit
 def test_hf_client_module_imports_without_torch() -> None:
-    """invest_forge.llm.hf_client must be importable even when torch is absent."""
+    """janus_terminal.llm.hf_client must be importable even when torch is absent."""
     # If torch is already installed in the test env this test still passes —
     # we are checking the import is unconditionally safe, not that torch is absent.
-    mod = importlib.import_module("invest_forge.llm.hf_client")
+    mod = importlib.import_module("janus_terminal.llm.hf_client")
     assert hasattr(mod, "HFLLMClient"), "HFLLMClient not found in hf_client module"
 
 
 @pytest.mark.unit
 def test_hf_client_dtype_aliases_are_strings() -> None:
     """_DTYPE_ALIASES must be defined at module level with no torch references."""
-    mod = importlib.import_module("invest_forge.llm.hf_client")
+    mod = importlib.import_module("janus_terminal.llm.hf_client")
     aliases = mod._DTYPE_ALIASES
     assert isinstance(aliases, dict)
     # All values should be plain strings (torch attribute names), not torch objects.
@@ -70,14 +70,14 @@ def test_build_client_dispatches_to_hf_for_all_aliases(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """build_client must recognise all hf aliases and NOT raise 'unsupported provider'."""
-    from invest_forge.common.config import LLMConfig
-    import invest_forge.llm.client as client_mod
+    from janus_terminal.common.config import LLMConfig
+    import janus_terminal.llm.client as client_mod
 
     # Patch HFLLMClient inside the client module's import namespace so the
     # factory uses our stub instead of trying to load a real model.
     monkeypatch.setattr(
         # We patch at the hf_client module level so the lazy import picks it up.
-        "invest_forge.llm.hf_client.HFLLMClient",
+        "janus_terminal.llm.hf_client.HFLLMClient",
         _StubHFLLMClient,
     )
 
@@ -104,13 +104,13 @@ def test_build_client_hf_raises_import_error_not_unsupported_when_no_torch(
     ValueError('unsupported provider').  This verifies that the hf branch IS
     reached and that the error is clearly from the model-load path.
     """
-    from invest_forge.common.config import LLMConfig
-    import invest_forge.llm.client as client_mod
+    from janus_terminal.common.config import LLMConfig
+    import janus_terminal.llm.client as client_mod
 
     # Simulate torch being absent by making HFLLMClient raise ImportError on init.
     original_hf = None
     try:
-        import invest_forge.llm.hf_client as hf_mod
+        import janus_terminal.llm.hf_client as hf_mod
         original_hf = hf_mod.HFLLMClient
 
         class _NoTorchStub:
@@ -134,7 +134,7 @@ def test_build_client_hf_raises_import_error_not_unsupported_when_no_torch(
 
     finally:
         if original_hf is not None:
-            import invest_forge.llm.hf_client as hf_mod2
+            import janus_terminal.llm.hf_client as hf_mod2
             monkeypatch.setattr(hf_mod2, "HFLLMClient", original_hf)
 
 
@@ -146,7 +146,7 @@ def test_build_client_hf_raises_import_error_not_unsupported_when_no_torch(
 @pytest.mark.unit
 def test_llm_config_hf_fields_default_to_auto() -> None:
     """LLMConfig must expose hf_device and hf_dtype defaulting to 'auto'."""
-    from invest_forge.common.config import LLMConfig
+    from janus_terminal.common.config import LLMConfig
 
     cfg = LLMConfig(
         provider="fake",
@@ -164,7 +164,7 @@ def test_llm_config_hf_fields_default_to_auto() -> None:
 @pytest.mark.unit
 def test_llm_config_hf_fields_accept_explicit_values() -> None:
     """LLMConfig must store explicitly provided hf_device and hf_dtype."""
-    from invest_forge.common.config import LLMConfig
+    from janus_terminal.common.config import LLMConfig
 
     cfg = LLMConfig(
         provider="hf",
@@ -238,7 +238,7 @@ def test_get_settings_hf_device_dtype_from_env(
 )
 def test_resolve_torch_dtype_known_aliases(name: str, expected_attr: str) -> None:
     """_resolve_torch_dtype must map known aliases to the correct torch attribute name."""
-    from invest_forge.llm.hf_client import _resolve_torch_dtype
+    from janus_terminal.llm.hf_client import _resolve_torch_dtype
 
     # Use a simple namespace object to simulate torch without importing it.
     class _FakeTorch:
@@ -253,7 +253,7 @@ def test_resolve_torch_dtype_known_aliases(name: str, expected_attr: str) -> Non
 @pytest.mark.unit
 def test_resolve_torch_dtype_auto_passthrough() -> None:
     """_resolve_torch_dtype must return the string 'auto' unchanged."""
-    from invest_forge.llm.hf_client import _resolve_torch_dtype
+    from janus_terminal.llm.hf_client import _resolve_torch_dtype
 
     result = _resolve_torch_dtype("auto", object())
     assert result == "auto"
@@ -262,7 +262,7 @@ def test_resolve_torch_dtype_auto_passthrough() -> None:
 @pytest.mark.unit
 def test_resolve_torch_dtype_unknown_raises() -> None:
     """_resolve_torch_dtype must raise ValueError for an unrecognised dtype string."""
-    from invest_forge.llm.hf_client import _resolve_torch_dtype
+    from janus_terminal.llm.hf_client import _resolve_torch_dtype
 
     with pytest.raises(ValueError, match="Unsupported hf_dtype"):
         _resolve_torch_dtype("int8", object())

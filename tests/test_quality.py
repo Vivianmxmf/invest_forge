@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from invest_forge.eval.quality import HeuristicScorer
-from invest_forge.eval.ragas_eval import stub_evaluate
+from janus_terminal.eval.quality import HeuristicScorer
+from janus_terminal.eval.ragas_eval import stub_evaluate
 
 
 @pytest.mark.unit

@@ -16,15 +16,15 @@ from typing import Any, Literal
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from invest_forge.agents.graph import GraphDeps, _initial_state, build_invest_graph, run_pipeline_inline
-from invest_forge.common.config import get_settings
-from invest_forge.common.logging_setup import get_logger
-from invest_forge.knowledge_base.builder import build_in_memory
-from invest_forge.knowledge_base.retriever import HybridRetriever
-from invest_forge.llm.client import build_analyst_client, build_client, build_vision_client
-from invest_forge.tools.data_tools import build_provider
-from invest_forge.tools.image_input import ImagePolicy, ImageRef, ImageValidationError, load_images
-from invest_forge.tools.sentiment import build_sentiment
+from janus_terminal.agents.graph import GraphDeps, _initial_state, build_invest_graph, run_pipeline_inline
+from janus_terminal.common.config import get_settings
+from janus_terminal.common.logging_setup import get_logger
+from janus_terminal.knowledge_base.builder import build_in_memory
+from janus_terminal.knowledge_base.retriever import HybridRetriever
+from janus_terminal.llm.client import build_analyst_client, build_client, build_vision_client
+from janus_terminal.tools.data_tools import build_provider
+from janus_terminal.tools.image_input import ImagePolicy, ImageRef, ImageValidationError, load_images
+from janus_terminal.tools.sentiment import build_sentiment
 
 logger = get_logger(__name__)
 

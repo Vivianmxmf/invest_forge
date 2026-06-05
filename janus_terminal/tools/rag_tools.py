@@ -11,12 +11,12 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Callable
 
-from invest_forge.common.config import get_settings
-from invest_forge.common.logging_setup import get_logger
-from invest_forge.common.types import RAGHit
-from invest_forge.knowledge_base.builder import build_in_memory
-from invest_forge.knowledge_base.retriever import HybridRetriever
-from invest_forge.llm.client import ChatMessage, LLMClient
+from janus_terminal.common.config import get_settings
+from janus_terminal.common.logging_setup import get_logger
+from janus_terminal.common.types import RAGHit
+from janus_terminal.knowledge_base.builder import build_in_memory
+from janus_terminal.knowledge_base.retriever import HybridRetriever
+from janus_terminal.llm.client import ChatMessage, LLMClient
 
 logger = get_logger(__name__)
 
@@ -25,7 +25,7 @@ def make_hyde_fn(client: LLMClient) -> Callable[[str], str]:
     """Build a HyDE-style query expander backed by the supplied LLM client.
 
     The agent passes the same client it uses elsewhere; with the FakeLLMClient
-    this is a deterministic short paragraph (see ``invest_forge/llm/fake.py``).
+    this is a deterministic short paragraph (see ``janus_terminal/llm/fake.py``).
     """
 
     def expand(query: str) -> str:

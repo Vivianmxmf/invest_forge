@@ -5,8 +5,8 @@ import json
 
 import pytest
 
-from invest_forge.agents.graph import run_pipeline_inline
-from invest_forge.common.types import Rating
+from janus_terminal.agents.graph import run_pipeline_inline
+from janus_terminal.common.types import Rating
 
 
 @pytest.mark.unit

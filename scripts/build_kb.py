@@ -17,8 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from invest_forge.common.config import get_settings  # noqa: E402
-from invest_forge.knowledge_base.builder import (  # noqa: E402
+from janus_terminal.common.config import get_settings  # noqa: E402
+from janus_terminal.knowledge_base.builder import (  # noqa: E402
     ChunkingConfig,
     build_in_memory,
     build_qdrant,

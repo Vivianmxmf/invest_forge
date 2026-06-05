@@ -15,7 +15,7 @@ alphalens = pytest.importorskip(
     reason="alphalens not installed — skip on laptop, run on server",
 )
 
-from invest_forge.tools.backtest_tools import (  # noqa: E402
+from janus_terminal.tools.backtest_tools import (  # noqa: E402
     alphalens_report,
     build_factor_panel,
     load_price_panel,
